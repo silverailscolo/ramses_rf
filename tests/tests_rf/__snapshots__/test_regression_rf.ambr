@@ -2487,6 +2487,8 @@
         'opentherm_state': dict({
           'counters': dict({
           }),
+          'faults': dict({
+          }),
           'flags': dict({
             'ch_active': False,
             'ch_enabled': False,
@@ -2520,6 +2522,8 @@
         'opentherm_state': dict({
           'counters': dict({
           }),
+          'faults': dict({
+          }),
           'flags': dict({
             'ch_active': True,
             'ch_enabled': True,
@@ -2548,6 +2552,8 @@
         'opentherm_state': dict({
           'counters': dict({
           }),
+          'faults': dict({
+          }),
           'flags': dict({
           }),
           'temperatures': dict({
@@ -2566,6 +2572,8 @@
         'is_alive': None,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
           }),
           'flags': dict({
           }),
@@ -2589,6 +2597,8 @@
         'is_alive': None,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
           }),
           'flags': dict({
             'ch_active': False,
@@ -2618,6 +2628,8 @@
         'opentherm_state': dict({
           'counters': dict({
           }),
+          'faults': dict({
+          }),
           'flags': dict({
           }),
           'temperatures': dict({
@@ -2635,6 +2647,8 @@
         'is_alive': None,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
           }),
           'flags': dict({
           }),
@@ -2656,6 +2670,8 @@
         'is_alive': None,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
           }),
           'flags': dict({
             'ch_active': False,
@@ -2686,6 +2702,8 @@
         'opentherm_state': dict({
           'counters': dict({
           }),
+          'faults': dict({
+          }),
           'flags': dict({
             'ch_active': True,
             'ch_enabled': True,
@@ -2714,6 +2732,8 @@
         'opentherm_state': dict({
           'counters': dict({
           }),
+          'faults': dict({
+          }),
           'flags': dict({
           }),
           'temperatures': dict({
@@ -2737,6 +2757,8 @@
         'is_alive': None,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
           }),
           'flags': dict({
             'ch_active': True,
@@ -2771,6 +2793,8 @@
         'opentherm_state': dict({
           'counters': dict({
           }),
+          'faults': dict({
+          }),
           'flags': dict({
             'ch_active': False,
             'ch_enabled': False,
@@ -2798,6 +2822,8 @@
         'is_alive': None,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
           }),
           'flags': dict({
           }),
@@ -2832,6 +2858,8 @@
         'is_alive': None,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
           }),
           'flags': dict({
             'ch_active': False,
@@ -2881,6 +2909,8 @@
           'ch_water_pressure': 1.0,
           'counters': dict({
           }),
+          'faults': dict({
+          }),
           'flags': dict({
           }),
           'last_updated': datetime.datetime(2023, 12, 29, 6, 13, 54, 679388, tzinfo=datetime.timezone.utc),
@@ -2896,6 +2926,7 @@
         'zone_index': None,
       }),
       dict({
+        'air_pressure_fault': False,
         'battery_low': None,
         'boiler_output_temp': 47.4,
         'boiler_return_temp': 44.7,
@@ -2913,12 +2944,24 @@
         'dhw_temp': 36.8,
         'fault_present': False,
         'flame_active': False,
+        'gas_flame_fault': False,
         'heat_demand': 0.0,
         'id': '10:048122',
         'is_alive': None,
+        'lockout_reset': False,
+        'low_water_pressure': False,
         'oem_code': 203.0,
+        'oem_fault_code': 0,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
+            'air_pressure_fault': False,
+            'gas_flame_fault': False,
+            'lockout_reset': False,
+            'low_water_pressure': False,
+            'service_request': False,
+            'water_over_temperature': False,
           }),
           'flags': dict({
             'ch_active': False,
@@ -2936,6 +2979,7 @@
           'last_updated': datetime.datetime(2024, 1, 3, 22, 42, 28, 309070, tzinfo=datetime.timezone.utc),
           'max_rel_modulation': 1.0,
           'oem_code': 203,
+          'oem_fault_code': 0,
           'rel_modulation_level': 0.0,
           'temperatures': dict({
             'boiler_output': 47.4,
@@ -2952,9 +2996,11 @@
           'max_rel_modulation': 1.0,
         }),
         'rel_modulation_level': 0.0,
+        'service_request': False,
         'summer_mode': False,
         'tcs_id': None,
         'type': 'OtbGateway',
+        'water_over_temperature': False,
         'zone_index': None,
       }),
       dict({
@@ -2968,6 +3014,8 @@
         'is_alive': None,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
           }),
           'flags': dict({
             'ch_active': False,
@@ -2999,6 +3047,8 @@
         'opentherm_state': dict({
           'counters': dict({
           }),
+          'faults': dict({
+          }),
           'flags': dict({
           }),
           'last_updated': datetime.datetime(2022, 2, 4, 20, 43, 42, 928635, tzinfo=datetime.timezone.utc),
@@ -3021,6 +3071,8 @@
         'opentherm_state': dict({
           'counters': dict({
           }),
+          'faults': dict({
+          }),
           'flags': dict({
           }),
           'last_updated': datetime.datetime(2021, 11, 8, 16, 32, 5, 979303, tzinfo=datetime.timezone.utc),
@@ -3037,6 +3089,7 @@
         'zone_index': None,
       }),
       dict({
+        'air_pressure_fault': False,
         'battery_low': None,
         'boiler_output_temp': 58.5,
         'boiler_return_temp': 2.0,
@@ -3050,10 +3103,22 @@
         'dhw_setpoint': 0.1,
         'fault_present': False,
         'flame_active': False,
+        'gas_flame_fault': False,
         'id': '10:052644',
         'is_alive': None,
+        'lockout_reset': False,
+        'low_water_pressure': False,
+        'oem_fault_code': 0,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
+            'air_pressure_fault': False,
+            'gas_flame_fault': False,
+            'lockout_reset': False,
+            'low_water_pressure': False,
+            'service_request': False,
+            'water_over_temperature': False,
           }),
           'flags': dict({
             'ch_active': False,
@@ -3069,6 +3134,7 @@
             'summer_mode': False,
           }),
           'last_updated': datetime.datetime(2021, 10, 26, 21, 59, 43, 207992, tzinfo=datetime.timezone.utc),
+          'oem_fault_code': 0,
           'temperatures': dict({
             'boiler_output': 58.5,
             'boiler_return': 2.0,
@@ -3078,12 +3144,15 @@
         'otc_active': False,
         'ramses_ii_params': dict({
         }),
+        'service_request': False,
         'summer_mode': False,
         'tcs_id': None,
         'type': 'OtbGateway',
+        'water_over_temperature': False,
         'zone_index': None,
       }),
       dict({
+        'air_pressure_fault': False,
         'battery_low': None,
         'boiler_output_temp': 47.0,
         'boiler_setpoint': 90.0,
@@ -3091,11 +3160,23 @@
         'ch_water_pressure': 6.0,
         'dhw_active': False,
         'flame_active': False,
+        'gas_flame_fault': False,
         'id': '10:062498',
         'is_alive': None,
+        'lockout_reset': False,
+        'low_water_pressure': False,
+        'oem_fault_code': 255,
         'opentherm_state': dict({
           'ch_water_pressure': 6.0,
           'counters': dict({
+          }),
+          'faults': dict({
+            'air_pressure_fault': False,
+            'gas_flame_fault': False,
+            'lockout_reset': False,
+            'low_water_pressure': False,
+            'service_request': False,
+            'water_over_temperature': False,
           }),
           'flags': dict({
             'ch_active': False,
@@ -3103,6 +3184,7 @@
             'flame_active': False,
           }),
           'last_updated': datetime.datetime(2021, 12, 23, 16, 23, 57, 928854, tzinfo=datetime.timezone.utc),
+          'oem_fault_code': 255,
           'rel_modulation_level': 0.0,
           'temperatures': dict({
             'boiler_output': 47.0,
@@ -3114,20 +3196,35 @@
         'ramses_ii_params': dict({
         }),
         'rel_modulation_level': 0.0,
+        'service_request': False,
         'tcs_id': None,
         'type': 'OtbGateway',
+        'water_over_temperature': False,
         'zone_index': None,
       }),
       dict({
+        'air_pressure_fault': False,
         'battery_low': None,
         'boiler_output_temp': 65.0,
         'ch_active': True,
         'dhw_active': True,
         'flame_active': True,
+        'gas_flame_fault': False,
         'id': '10:067219',
         'is_alive': None,
+        'lockout_reset': False,
+        'low_water_pressure': False,
+        'oem_fault_code': 255,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
+            'air_pressure_fault': False,
+            'gas_flame_fault': False,
+            'lockout_reset': False,
+            'low_water_pressure': False,
+            'service_request': False,
+            'water_over_temperature': False,
           }),
           'flags': dict({
             'ch_active': True,
@@ -3135,6 +3232,7 @@
             'flame_active': True,
           }),
           'last_updated': datetime.datetime(2022, 7, 4, 17, 0, tzinfo=datetime.timezone.utc),
+          'oem_fault_code': 255,
           'rel_modulation_level': 0.0,
           'temperatures': dict({
             'boiler_output': 65.0,
@@ -3143,8 +3241,10 @@
         'ramses_ii_params': dict({
         }),
         'rel_modulation_level': 0.0,
+        'service_request': False,
         'tcs_id': None,
         'type': 'OtbGateway',
+        'water_over_temperature': False,
         'zone_index': None,
       }),
       dict({
@@ -3156,6 +3256,8 @@
         'is_alive': None,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
           }),
           'flags': dict({
             'ch_active': False,
@@ -3193,6 +3295,8 @@
         'opentherm_state': dict({
           'counters': dict({
           }),
+          'faults': dict({
+          }),
           'flags': dict({
             'ch_active': False,
             'ch_enabled': True,
@@ -3229,6 +3333,8 @@
         'opentherm_state': dict({
           'counters': dict({
           }),
+          'faults': dict({
+          }),
           'flags': dict({
           }),
           'last_updated': datetime.datetime(2023, 12, 8, 0, 2, 55, 564855, tzinfo=datetime.timezone.utc),
@@ -3243,6 +3349,7 @@
         'zone_index': None,
       }),
       dict({
+        'air_pressure_fault': False,
         'battery_low': None,
         'boiler_output_temp': 53.69,
         'boiler_return_temp': 33.0,
@@ -3258,11 +3365,23 @@
         'dhw_setpoint': 60.0,
         'fault_present': False,
         'flame_active': True,
+        'gas_flame_fault': False,
         'heat_demand': 0.0,
         'id': '10:078099',
         'is_alive': None,
+        'lockout_reset': False,
+        'low_water_pressure': False,
+        'oem_fault_code': 255,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
+            'air_pressure_fault': False,
+            'gas_flame_fault': False,
+            'lockout_reset': False,
+            'low_water_pressure': False,
+            'service_request': False,
+            'water_over_temperature': False,
           }),
           'flags': dict({
             'ch_active': True,
@@ -3278,6 +3397,7 @@
             'summer_mode': False,
           }),
           'last_updated': datetime.datetime(2022, 2, 28, 16, 26, 42, 880766, tzinfo=datetime.timezone.utc),
+          'oem_fault_code': 255,
           'rel_modulation_level': 0.0,
           'temperatures': dict({
             'boiler_output': 53.69,
@@ -3291,9 +3411,11 @@
         'ramses_ii_params': dict({
         }),
         'rel_modulation_level': 0.0,
+        'service_request': False,
         'summer_mode': False,
         'tcs_id': None,
         'type': 'OtbGateway',
+        'water_over_temperature': False,
         'zone_index': None,
       }),
       dict({
@@ -3304,6 +3426,8 @@
         'is_alive': None,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
           }),
           'flags': dict({
           }),
@@ -3326,6 +3450,8 @@
         'opentherm_state': dict({
           'counters': dict({
           }),
+          'faults': dict({
+          }),
           'flags': dict({
           }),
           'temperatures': dict({
@@ -3344,6 +3470,8 @@
         'is_alive': None,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
           }),
           'flags': dict({
           }),
@@ -3375,6 +3503,8 @@
           'counters': dict({
           }),
           'dhw_flow_rate': 5.55,
+          'faults': dict({
+          }),
           'flags': dict({
             'ch_active': True,
             'dhw_active': False,
@@ -3405,6 +3535,8 @@
         'opentherm_state': dict({
           'counters': dict({
           }),
+          'faults': dict({
+          }),
           'flags': dict({
             'ch_active': False,
             'dhw_active': False,
@@ -3430,6 +3562,8 @@
         'opentherm_state': dict({
           'counters': dict({
           }),
+          'faults': dict({
+          }),
           'flags': dict({
           }),
           'last_updated': datetime.datetime(2022, 9, 5, 9, 52, 36, 550000, tzinfo=datetime.timezone.utc),
@@ -3450,6 +3584,8 @@
         'opentherm_state': dict({
           'counters': dict({
           }),
+          'faults': dict({
+          }),
           'flags': dict({
           }),
           'temperatures': dict({
@@ -3467,6 +3603,8 @@
         'is_alive': None,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
           }),
           'flags': dict({
           }),
@@ -3488,6 +3626,8 @@
         'is_alive': None,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
           }),
           'flags': dict({
             'ch_active': False,
@@ -3512,6 +3652,8 @@
         'is_alive': None,
         'opentherm_state': dict({
           'counters': dict({
+          }),
+          'faults': dict({
           }),
           'flags': dict({
           }),

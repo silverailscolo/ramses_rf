@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from ramses_rf.config import SZ_CLASS
 from ramses_rf.const import (
     SZ_CIRCUITS,
     SZ_ZONE_INDEX,
@@ -20,7 +21,10 @@ from ramses_rf.models import (
     UfhCircuitState,
     UfhState,
 )
-from ramses_rf.schemas import SZ_CLASS, SZ_UFH_SYSTEM, load_tcs
+from ramses_rf.schemas import (
+    SZ_UFH_SYSTEM,
+    load_tcs,
+)
 from ramses_rf.systems.tcs import Evohome
 from ramses_rf.systems.zones import UfhZone
 from ramses_rf.topology import Parent

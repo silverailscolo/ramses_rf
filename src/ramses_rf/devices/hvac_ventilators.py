@@ -218,7 +218,11 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
                        (expects ``remotes`` and/or ``sensors`` keys).
         :type schema: Any
         """
-        from ramses_rf.schemas import SCH_VCS, SZ_REMOTES, SZ_SENSORS
+        from ramses_rf.schemas import (
+            SCH_VCS,
+            SZ_REMOTES,
+            SZ_SENSORS,
+        )
 
         schema = shrink(SCH_VCS(schema))
         for dev_id in schema.get(SZ_REMOTES, []):
@@ -244,7 +248,10 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :returns: A schema dictionary with remotes and sensors lists.
         :rtype: dict[str, Any]
         """
-        from ramses_rf.schemas import SZ_REMOTES, SZ_SENSORS
+        from ramses_rf.schemas import (
+            SZ_REMOTES,
+            SZ_SENSORS,
+        )
 
         result: dict[str, Any] = {}
         if self._remote_ids:

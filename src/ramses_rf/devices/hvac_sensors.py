@@ -8,6 +8,7 @@ from typing import Any
 from ramses_rf import exceptions as exc
 from ramses_rf.address import Address
 from ramses_rf.commands.core import Command as Intent
+from ramses_rf.config import SZ_BOUND_TO
 from ramses_rf.const import (
     HEARTBEAT_TIMEOUT_SENSOR,
     SZ_CO2_LEVEL,
@@ -19,7 +20,6 @@ from ramses_rf.const import (
 from ramses_rf.enums import Action
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits, HvacState
-from ramses_rf.schemas import SZ_BOUND_TO
 from ramses_rf.strategies import VentilationControlStrategy, best_hvac_strategy
 from ramses_tx import Packet, Priority
 from ramses_tx.const import Code

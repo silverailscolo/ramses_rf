@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime as dt
+from datetime import datetime as dt, timedelta as td
 from typing import Any, cast
 from unittest.mock import MagicMock
 
@@ -64,7 +64,11 @@ from ramses_rf.models import (
 )
 from ramses_rf.payloads.hvac import HvacBypassStatePayload
 from ramses_rf.pipeline.ingestion import StateProjector
-from ramses_rf.protocol.opentherm import OtDataId
+from ramses_rf.protocol.opentherm import (
+    SZ_VALUE_HB,
+    SZ_VALUE_LB,
+    OtDataId,
+)
 from ramses_rf.state_projector import (
     _update_hvac_state,
     process_state_updates,
@@ -312,6 +316,68 @@ def test_worker_opentherm_status_flag_parsing() -> None:
     assert device.opentherm_state.flags.ch_active is True
     assert device.opentherm_state.flags.flame_active is True
     assert device.opentherm_state.flags.ch_enabled is False
+
+
+def test_worker_opentherm_fault_flag_parsing() -> None:
+    """Verify msg_id 0x05 populates fault flags and the OEM fault code."""
+    # Arrange
+    device = FakeDevice()
+    registry = FakeRegistry(device)
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+
+    worker = StateProjector(gwy_adapter, queue)
+
+    mock_msg = MockMessage(
+        code=Code._3220,
+        verb=Verb.RP,
+        payload={
+            SZ_MESSAGE_ID: int(OtDataId.OEM_FAULTS),
+            SZ_VALUE_HB: [1, 0, 1, 0, 0, 1, 0, 0],
+            SZ_VALUE_LB: 42,
+        },
+        src_id=device.id,
+    )
+
+    # Act
+    worker._update_opentherm_state(device, mock_msg.payload, mock_msg)
+
+    # Assert
+    faults = device.opentherm_state.faults
+    assert faults.service_request is True
+    assert faults.lockout_reset is False
+    assert faults.low_water_pressure is True
+    assert faults.gas_flame_fault is False
+    assert faults.air_pressure_fault is False
+    assert faults.water_over_temperature is True
+    assert device.opentherm_state.oem_fault_code == 42
+
+
+def test_worker_opentherm_exhaust_temp_parsing() -> None:
+    """Verify msg_id 0x21 populates the boiler exhaust temperature."""
+    # Arrange
+    device = FakeDevice()
+    registry = FakeRegistry(device)
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+
+    worker = StateProjector(gwy_adapter, queue)
+
+    mock_msg = MockMessage(
+        code=Code._3220,
+        verb=Verb.RP,
+        payload={
+            SZ_MESSAGE_ID: int(OtDataId.BOILER_EXHAUST_TEMP),
+            SZ_VALUE: 58,
+        },
+        src_id=device.id,
+    )
+
+    # Act
+    worker._update_opentherm_state(device, mock_msg.payload, mock_msg)
+
+    # Assert
+    assert device.opentherm_state.temperatures.boiler_exhaust == 58
 
 
 def test_worker_hvac_state_parsing() -> None:
@@ -1459,6 +1525,87 @@ async def test_process_state_updates_src_only_liveness() -> None:
     # cast to object: the earlier `is None` assert narrows the member to
     # None, and mypy marks any `is`/`==` with reply_msg as unreachable
     assert cast(object, fan_dev._last_msg) is reply_msg
+    assert fan_dev._missed_polls == 0
+
+
+@pytest.mark.asyncio
+async def test_process_state_updates_liveness_is_monotonic() -> None:
+    """A stale packet completing out of order must not regress liveness.
+
+    Cached-packet replay at gateway restore feeds packets through
+    fire-and-forget handler tasks whose completion order does not match
+    packet order; without the monotonic guard the oldest packet's stamp
+    wins, leaving ``_last_msg_dtm`` stale and flapping the device to
+    unavailable until the next live broadcast (ramses_cc issue 1278).
+    """
+    # Arrange — a FAN that already holds a fresh stamp
+    fresh_dtm = dt.now()
+    stale_dtm = fresh_dtm - td(hours=3)
+    fan_dev = _LivenessDevice("32:153289", missed_polls=3)
+    fan_dev._last_msg_dtm = fresh_dtm
+    gwy_adapter = FakeGatewayAdapter(FakeRegistry(fan_dev))
+
+    # Act — an older packet completes after the fresh one
+    stale_msg = MockMessage(
+        code=Code._10E0,
+        verb=Verb.RP,
+        payload={},
+        src_id="32:153289",
+        dtm=stale_dtm,
+    )
+    stale_msg.payload = None
+    await process_state_updates(gwy_adapter, stale_msg)
+
+    # Assert — the liveness triple is not rolled back
+    assert fan_dev._last_msg_dtm == fresh_dtm
+    assert fan_dev._last_msg is None
+    assert fan_dev._missed_polls == 3
+
+    # Act — a fresher packet still updates normally
+    newer_msg = MockMessage(
+        code=Code._10E0,
+        verb=Verb.RP,
+        payload={},
+        src_id="32:153289",
+        dtm=fresh_dtm + td(minutes=1),
+    )
+    newer_msg.payload = None
+    await process_state_updates(gwy_adapter, newer_msg)
+
+    assert fan_dev._last_msg_dtm == newer_msg.dtm
+    assert cast(object, fan_dev._last_msg) is newer_msg
+    assert fan_dev._missed_polls == 0
+
+
+@pytest.mark.asyncio
+async def test_process_state_updates_prestamped_dtm_still_stamps() -> None:
+    """An equal stored stamp must not block the rest of the triple.
+
+    ``_mark_src_device_alive()`` in the dispatcher stamps
+    ``_last_msg_dtm`` before validation, so when a live packet reaches
+    ``process_state_updates`` the stored stamp already equals
+    ``msg.dtm``; a strictly-newer gate then leaves ``_last_msg`` unset
+    and ``_missed_polls`` counting up forever (ramses_rf issue 1262).
+    """
+    # Arrange — the dispatcher's early liveness stamp has already run
+    fan_dev = _LivenessDevice("32:153289", missed_polls=3)
+    live_msg = MockMessage(
+        code=Code._10E0,
+        verb=Verb.RP,
+        payload={},
+        src_id="32:153289",
+        dst_id="18:130236",
+    )
+    live_msg.payload = None
+    fan_dev._last_msg_dtm = live_msg.dtm
+    gwy_adapter = FakeGatewayAdapter(FakeRegistry(fan_dev))
+
+    # Act — the same live packet completes the state-update path
+    await process_state_updates(gwy_adapter, live_msg)
+
+    # Assert — the remainder of the liveness triple still applies
+    assert fan_dev._last_msg_dtm == live_msg.dtm
+    assert cast(object, fan_dev._last_msg) is live_msg
     assert fan_dev._missed_polls == 0
 
 

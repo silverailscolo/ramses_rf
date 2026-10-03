@@ -5,14 +5,16 @@ from typing import Any
 
 import probatio as vol
 
+from ramses_rf.config import SZ_CLASS
+from ramses_rf.const import (
+    SZ_ACTUATORS,
+    SZ_SENSOR,
+)
 from ramses_rf.schemas import (
     SCH_TCS_DHW,
     SCH_TCS_ZONES_ZON,
-    SZ_ACTUATORS,
-    SZ_CLASS,
     SZ_DHW_VALVE,
     SZ_HTG_VALVE,
-    SZ_SENSOR,
 )
 
 from .helpers import assert_raises

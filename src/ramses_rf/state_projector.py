@@ -8,6 +8,7 @@ import dataclasses
 import logging
 import uuid
 from collections.abc import Callable
+from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, Final, cast
 
 from ramses_tx.const import RQ, Code
@@ -954,6 +955,33 @@ def _update_schedule_state(
         sched.process_schedule_msg(msg)
 
 
+def _is_newer_dtm(new_dtm: dt, old_dtm: dt | None) -> bool:
+    """Return True if a message is fresher than a stored timestamp.
+
+    Liveness stamps must be monotonic: message handlers run as
+    fire-and-forget tasks whose completion order does not match packet
+    order, so a late or replayed packet must never roll
+    ``_last_msg_dtm`` backwards and flap the device to unavailable
+    (ramses_cc issue 1278).  ``timestamp()`` treats naive datetimes as
+    local time, matching ``DeviceBase.is_available`` semantics.
+
+    :param new_dtm: The incoming message timestamp.
+    :type new_dtm: dt
+    :param old_dtm: The currently stored timestamp (may be ``None``).
+    :type old_dtm: dt | None
+    :return: True if the incoming stamp should replace the stored one.
+    :rtype: bool
+    """
+    if old_dtm is None:
+        return True
+    try:
+        return new_dtm.timestamp() > old_dtm.timestamp()
+    except TypeError:
+        # Non-comparable values (mocks in tests) fail open to preserve the
+        # previous unconditional stamping behaviour.
+        return True
+
+
 async def process_state_updates(gateway: Gateway, msg: Message) -> None:
     """Ingest message payloads into entity state read-models.
 
@@ -973,12 +1001,24 @@ async def process_state_updates(gateway: Gateway, msg: Message) -> None:
         for device in list(registry.device_by_id.values()):
             src_id = getattr(msg.src, "id", None)
             if device.id == src_id:
-                if hasattr(device, "_last_msg_dtm"):
-                    device._last_msg_dtm = msg.dtm
-                if hasattr(device, "_last_msg"):
-                    device._last_msg = msg
-                if hasattr(device, "_missed_polls"):
-                    device._missed_polls = 0
+                # The whole liveness triple updates atomically and only
+                # for a fresher message: an out-of-order cached/late
+                # packet must not roll these back (ramses_cc issue 1278).
+                # NB: _mark_src_device_alive() already stamped
+                # _last_msg_dtm with this msg's dtm upstream, so the
+                # stored stamp may EQUAL msg.dtm — allow equality or
+                # _last_msg and _missed_polls are never updated for
+                # live packets (ramses_rf issue 1262).
+                stored_dtm = getattr(device, "_last_msg_dtm", None)
+                if _is_newer_dtm(msg.dtm, stored_dtm) or (
+                    stored_dtm is not None and stored_dtm == msg.dtm
+                ):
+                    if hasattr(device, "_last_msg_dtm"):
+                        device._last_msg_dtm = msg.dtm
+                    if hasattr(device, "_last_msg"):
+                        device._last_msg = msg
+                    if hasattr(device, "_missed_polls"):
+                        device._missed_polls = 0
             if device.id in (
                 src_id,
                 getattr(msg.dst, "id", None),

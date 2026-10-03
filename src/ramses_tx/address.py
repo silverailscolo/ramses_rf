@@ -7,7 +7,7 @@ from functools import lru_cache
 from typing import Final
 
 from . import exceptions as exc
-from .const import DEVICE_ID_REGEX
+from .const import DEVICE_ID_REGEX, HGI_PREFIX
 from .typing import DeviceIdT
 
 HGI_DEVICE_ID: DeviceIdT = DeviceIdT("18:000730")
@@ -148,6 +148,18 @@ def is_valid_dev_id(value: str, device_class: None | str = None) -> bool:
     return (
         isinstance(value, str) and DEVICE_ID_REGEX.ANY.match(value) is not None
     )
+
+
+def is_hgi_id(device_id: str) -> bool:
+    """Return True if the device_id is an HGI gateway interface (``18:`` prefix).
+
+    HGI gateways are RF receivers, not remote devices — downstream packages
+    (e.g. ramses_cc discovery) use this instead of hardcoding the prefix.
+
+    :param device_id: The device ID to check (e.g. '18:000730').
+    :return: True if the id is an HGI device id.
+    """
+    return isinstance(device_id, str) and device_id.startswith(HGI_PREFIX)
 
 
 @lru_cache(maxsize=2048)

@@ -14,6 +14,7 @@ from .const import I_, RQ, Code
 from .messages import Message
 from .state_projector import (
     _get_dhw_zone_from_msg,
+    _is_newer_dtm,
     _resolve_logical_targets,
     _route_2411_to_fan,
     _update_demand_state,
@@ -89,6 +90,37 @@ async def _cqrs_ingestion_engine(gateway: Gateway, msg: Message) -> None:
     await process_state_updates(gateway, msg)
 
 
+def _mark_src_device_alive(gateway: Gateway, msg: Message) -> None:
+    """Refresh the liveness timestamp of the message's source device.
+
+    Any frame demonstrably sourced by a known device proves it is
+    transmitting, even if the frame is subsequently dropped by semantic
+    validation (``validate_slugs``) — payload validity and device liveness
+    are separate concerns (issue 1255).
+
+    Only the source device is marked: a message merely *addressed to* a
+    device does not prove that device is reachable.  Unknown sources are
+    ignored — liveness never instantiates or revives devices.
+
+    :param gateway: The gateway handling the message.
+    :type gateway: Gateway
+    :param msg: The message being processed.
+    :type msg: Message
+    """
+    registry = getattr(gateway, "device_registry", None)
+    if registry is None:
+        return
+    device = registry.device_by_id.get(msg.src.id)
+    if (
+        device is not None
+        and hasattr(device, "_last_msg_dtm")
+        # Monotonic stamp: out-of-order handler tasks (e.g. cached-packet
+        # replay at restore) must not regress liveness — ramses_cc 1278.
+        and _is_newer_dtm(msg.dtm, device._last_msg_dtm)
+    ):
+        device._last_msg_dtm = msg.dtm
+
+
 async def process_msg(gateway: Gateway, msg: Message) -> None:
     """Decode the packet payload and route it through the message pipeline.
 
@@ -112,6 +144,12 @@ async def process_msg(gateway: Gateway, msg: Message) -> None:
 
         if not instantiate_devices(gateway, msg):
             return
+
+        # The source device has demonstrably transmitted: refresh its
+        # liveness before semantic validation may drop the packet (the
+        # state projector still records _last_msg/_missed_polls only for
+        # fully-valid messages).
+        _mark_src_device_alive(gateway, msg)
 
         if not validate_slugs(gateway, msg):
             _log_message(gateway, msg)
