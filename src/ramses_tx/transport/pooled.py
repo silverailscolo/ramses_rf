@@ -24,6 +24,14 @@ list index) so existing proxy bindings stay stable, and
 ``move_hgi()`` reassigns an HGI identity between children
 (issue 1261).  Generic runtime ``add_child()`` and
 ``set_accepted_hgis()`` are separate changes.
+``set_accepted_hgis()``/``remove_child()`` remain deferred until a
+concurrency-safe synchronization model is designed (issue 1119);
+``add_callback_child()`` supports append-only runtime add of
+callback-driven children (issue 1261).
+``add_child()``/``remove_child()`` remain deferred until a
+concurrency-safe synchronization model is designed (issue 1119);
+``set_accepted_hgis()`` is safe to call at runtime since the
+accepted set is only consulted at send time (issue 1261).
 """
 
 from __future__ import annotations
@@ -392,6 +400,11 @@ class PooledTransport(TransportInterface):
     bindings (issue 1119).  :meth:`remove_child` marks the child
     ``removed`` and all routing/status/stats views skip it via
     ``_live_children`` (issue 1261).
+    Transport-driven children are immutable after construction —
+    generic ``add_child()``/``remove_child()`` are deferred until a
+    concurrency-safe synchronization model is designed (issue 1119).
+    Append-only ``add_callback_child()`` is supported for
+    callback-driven children (issue 1261).
 
     :param protocol: The real protocol that receives deduplicated
         packets.
@@ -657,6 +670,64 @@ class PooledTransport(TransportInterface):
             dst_child_id,
         )
         return True
+    def add_callback_child(
+        self, hgi_id: str, port_name: str | None = None
+    ) -> int:
+        """Append a callback-driven child for an HGI at runtime.
+
+        Safe at runtime because the append is atomic and the new
+        ``child_id`` equals the new list index — existing proxy
+        bindings and in-flight ``RoutedCommand``s are unaffected.
+        Only callback-driven children (``transport=None``) are
+        supported; transport-driven children are still construction-
+        only (issue 1119).
+
+        :param hgi_id: The HGI device ID the child represents.
+        :param port_name: Optional port name; defaults to
+            ``mqtt_ha://<hgi_id>``.
+        :returns: The new child's stable ID.
+        """
+        child_id = len(self._children)
+        child = PoolChild(
+            child_id=child_id,
+            port_name=port_name or f"mqtt_ha://{hgi_id}",
+            transport=None,
+            hgi_id=DeviceIdT(hgi_id),
+            callback_driven=True,
+        )
+        self._children.append(child)
+        self._refresh_child_acceptance(child)
+        _LOGGER.info(
+            "PooledTransport: added callback child %d for HGI %s "
+            "(accepted=%s)",
+            child_id,
+            hgi_id,
+            child.accepted,
+        )
+        return child_id
+    def set_accepted_hgis(self, accepted_hgis: set[str] | None) -> None:
+        """Update the accepted-HGI set at runtime.
+
+        Replaces the outbound-routing whitelist and re-evaluates each
+        child's ``accepted`` flag.  Takes effect immediately: the set is
+        only consulted at send time via ``is_sendable``.  HGIs without a
+        pool child are tolerated — they simply match nothing until a
+        child learns that identity.
+
+        :param accepted_hgis: HGI IDs eligible for outbound routing, or
+            ``None`` to accept every child (backward-compatible default).
+        """
+        self._accepted_hgis = (
+            frozenset(accepted_hgis) if accepted_hgis is not None else None
+        )
+        for child in self._children:
+            self._refresh_child_acceptance(child)
+        _LOGGER.info(
+            "PooledTransport: accepted_hgis updated to %s",
+            sorted(self._accepted_hgis)
+            if self._accepted_hgis is not None
+            else "all",
+        )
 
     # -- TX echo recording (issue 1185) ---------------------------------
 
