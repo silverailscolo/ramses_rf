@@ -145,6 +145,7 @@ class MqttCallbackPoolAdapter:
             child_id,
         )
         return removed
+
     def add_child(self, hgi_id: str, *, accepted: bool | None = None) -> int:
         """Register a callback-driven child for an HGI at runtime.
 

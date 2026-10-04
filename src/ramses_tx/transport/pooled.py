@@ -670,6 +670,7 @@ class PooledTransport(TransportInterface):
             dst_child_id,
         )
         return True
+
     def add_callback_child(
         self, hgi_id: str, port_name: str | None = None
     ) -> int:

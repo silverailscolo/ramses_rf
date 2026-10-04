@@ -536,6 +536,8 @@ def test_move_hgi_rejects_invalid_args(
     assert pool.move_hgi(1, 0) is False  # src has no hgi_id
     pool.remove_child(0)
     assert pool.move_hgi(0, 1) is False  # src tombstoned
+
+
 async def test_set_accepted_hgis_updates_routing_live() -> None:
     """set_accepted_hgis changes outbound eligibility without reload.
 
@@ -1348,28 +1350,6 @@ def test_no_add_child_method(
         proto, [None], config=TransportConfig(), loop=event_loop
     )
     assert not hasattr(pool, "add_child")
-
-
-def test_no_set_accepted_hgis_method(
-    event_loop: asyncio.AbstractEventLoop,
-) -> None:
-    """PooledTransport does not expose runtime set_accepted_hgis()."""
-    proto = _make_mock_protocol()
-    pool = PooledTransport(
-        proto, [None], config=TransportConfig(), loop=event_loop
-    )
-    assert not hasattr(pool, "set_accepted_hgis")
-
-
-def test_no_remove_child_method(
-    event_loop: asyncio.AbstractEventLoop,
-) -> None:
-    """PooledTransport does not expose runtime remove_child()."""
-    proto = _make_mock_protocol()
-    pool = PooledTransport(
-        proto, [None], config=TransportConfig(), loop=event_loop
-    )
-    assert not hasattr(pool, "remove_child")
 
 
 # -- PR 1: Health monitoring (no last-resort re-enable) --------------------
