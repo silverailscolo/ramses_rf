@@ -1354,6 +1354,13 @@ def test_no_set_accepted_hgis_method(
     event_loop: asyncio.AbstractEventLoop,
 ) -> None:
     """PooledTransport does not expose runtime set_accepted_hgis()."""
+    proto = _make_mock_protocol()
+    pool = PooledTransport(
+        proto, [None], config=TransportConfig(), loop=event_loop
+    )
+    assert not hasattr(pool, "set_accepted_hgis")
+
+
 def test_no_remove_child_method(
     event_loop: asyncio.AbstractEventLoop,
 ) -> None:
@@ -1362,7 +1369,6 @@ def test_no_remove_child_method(
     pool = PooledTransport(
         proto, [None], config=TransportConfig(), loop=event_loop
     )
-    assert not hasattr(pool, "set_accepted_hgis")
     assert not hasattr(pool, "remove_child")
 
 
