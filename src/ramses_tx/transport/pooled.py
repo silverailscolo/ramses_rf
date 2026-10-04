@@ -705,6 +705,7 @@ class PooledTransport(TransportInterface):
             child.accepted,
         )
         return child_id
+
     def set_accepted_hgis(self, accepted_hgis: set[str] | None) -> None:
         """Update the accepted-HGI set at runtime.
 
