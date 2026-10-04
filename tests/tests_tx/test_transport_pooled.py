@@ -441,29 +441,32 @@ async def test_set_accepted_hgis_updates_routing_live() -> None:
     _connect_and_ready(pool, 1, t1)
     await asyncio.sleep(0.01)
 
-    assert pool._children[0].is_sendable is True
-    assert pool._children[1].is_sendable is False
+    # Read through a call so mypy does not narrow is_sendable across
+    # the set_accepted_hgis transitions below.
+    sendable = [c.is_sendable for c in pool._children]
+    assert sendable == [True, False]
     assert pool._select_child() is pool._children[0]
 
     # Accept the second HGI — it becomes sendable immediately.
     pool.set_accepted_hgis({"18:001111", "18:002222"})
     assert pool._children[1].accepted is True
-    assert pool._children[1].is_sendable is True
+    sendable = [c.is_sendable for c in pool._children]
+    assert sendable == [True, True]
 
     # Restrict to the second HGI — the first is excluded.
     pool.set_accepted_hgis({"18:002222"})
-    assert pool._children[0].is_sendable is False
-    assert pool._children[1].is_sendable is True
+    sendable = [c.is_sendable for c in pool._children]
+    assert sendable == [False, True]
 
     # An accepted HGI with no child is tolerated (no error).
     pool.set_accepted_hgis({"18:009999"})
-    assert pool._children[0].is_sendable is False
-    assert pool._children[1].is_sendable is False
+    sendable = [c.is_sendable for c in pool._children]
+    assert sendable == [False, False]
 
     # None restores backward-compatible accept-all.
     pool.set_accepted_hgis(None)
-    assert pool._children[0].is_sendable is True
-    assert pool._children[1].is_sendable is True
+    sendable = [c.is_sendable for c in pool._children]
+    assert sendable == [True, True]
 
 
 async def test_child_connection_lost_fails_wait_promptly() -> None:
