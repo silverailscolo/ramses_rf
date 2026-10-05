@@ -1,7 +1,7 @@
 """Native APS acknowledgements must pace writes without ASCII control traffic."""
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from zigpy import types
@@ -18,8 +18,17 @@ class NativeTXCluster(Cluster):
     cluster_id = 0xFC01
 
     class ClientCommandDefs(foundation.BaseCommandDefs):
-        set_text = foundation.ZCLCommandDef(
-            id=0x00, schema={"text": types.CharacterString}
+        send_chunk = foundation.ZCLCommandDef(
+            id=0x02,
+            schema={
+                "message_id": types.uint32_t,
+                "sequence": types.uint8_t,
+                "total": types.uint8_t,
+                "text": types.CharacterString,
+            },
+        )
+        native_mode = foundation.ZCLCommandDef(
+            id=0x03, schema={"enabled": types.Bool}
         )
 
 
@@ -52,7 +61,8 @@ async def test_real_zigpy_serialization_requests_aps_ack_without_zcl_reply():
     endpoint.device.get_sequence.return_value = 7
     cluster = NativeTXCluster(endpoint, is_server=True)
     transport._get_active_write_cluster = MagicMock(return_value=cluster)
-    await transport._send_command("1/2|hello", 1, 2)
+    transport._native_message_id = 0x12345678
+    await transport._send_command("hello", 1, 2)
     kwargs = endpoint.reply.call_args.kwargs
     assert kwargs["ask_for_ack"] is True
     assert kwargs["expect_reply"] is False
@@ -61,14 +71,15 @@ async def test_real_zigpy_serialization_requests_aps_ack_without_zcl_reply():
     assert (
         header.frame_control.direction == foundation.Direction.Client_to_Server
     )
-    assert body == b"\x091/2|hello"
+    assert header.command_id == 0x02
+    assert body == b"\x78\x56\x34\x12\x01\x02\x05hello"
 
 
 @pytest.mark.asyncio
 async def test_failed_delivery_aborts_remaining_chunks_without_api_fallback():
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     cluster = MagicMock()
-    cluster.client_commands = {0: object()}
+    cluster.client_commands = {2: object()}
     cluster.client_command = AsyncMock(side_effect=TimeoutError)
     cluster.command = AsyncMock()
     cluster.server_command = AsyncMock()
@@ -106,13 +117,23 @@ async def test_next_chunk_waits_for_delivery_and_frames_do_not_interleave():
     assert all("b" in chunk for chunk in sent[3:])
 
 
-def test_aps_payloads_stay_within_conservative_wire_budget():
+@pytest.mark.asyncio
+async def test_aps_payloads_stay_within_conservative_wire_budget():
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
+    sent = []
+
+    async def send(chunk, sequence, total):
+        sent.append(chunk)
+
+    transport._send_command = send
     for length in range(1, 256):
-        chunks = transport._chunk_payload("x" * length)
-        assert all(
-            len(chunk.encode("ascii")) + 4 <= 40 for _, _, chunk in chunks
-        )
+        # Avoid intentionally added pacing sleeps in this payload-boundary test.
+        with patch(
+            "ramses_tx.transport.zigbee.transport.asyncio.sleep",
+            new=AsyncMock(),
+        ):
+            await transport._write_frame("x" * length)
+    assert all(len(chunk.encode("ascii")) + 10 <= 40 for chunk in sent)
 
 
 def test_new_message_replaces_incomplete_message_with_same_chunk_count():
@@ -132,3 +153,70 @@ def test_malformed_chunk_and_legacy_ack_never_schedule_control_traffic():
     transport._frame_read.assert_not_called()
     transport.cluster_command(1, 0, "0/3|invalid")
     transport._loop.create_task.assert_not_called()
+
+
+def test_native_late_chunks_cannot_join_a_different_message():
+    transport = _make_transport(f"{_VALID_URL}?ack=aps")
+    transport._frame_read = MagicMock()
+    for args in ((10, 1, 2, "old"), (11, 1, 2, "new"), (10, 2, 2, "late")):
+        transport.cluster_command(1, 2, args)
+    transport._frame_read.assert_not_called()
+    transport.cluster_command(1, 2, (11, 2, 2, "end"))
+    assert transport._frame_read.call_args.args[1] == "newend"
+    transport._loop.create_task.assert_not_called()
+
+
+def test_native_gap_drops_message_and_next_message_recovers():
+    transport = _make_transport(f"{_VALID_URL}?ack=aps")
+    transport._frame_read = MagicMock()
+    for args in ((10, 1, 3, "first"), (10, 3, 3, "gap"), (10, 2, 3, "late")):
+        transport.cluster_command(1, 2, args)
+    transport._frame_read.assert_not_called()
+    transport.cluster_command(1, 2, (11, 1, 1, "complete"))
+    assert transport._frame_read.call_args.args[1] == "complete"
+
+
+def test_native_duplicate_chunks_do_not_deliver_twice():
+    transport = _make_transport(f"{_VALID_URL}?ack=aps")
+    transport._frame_read = MagicMock()
+    for args in ((10, 1, 2, "one"), (10, 1, 2, "one"), (10, 2, 2, "two")) * 2:
+        transport.cluster_command(1, 2, args)
+    transport._frame_read.assert_called_once()
+    assert transport._frame_read.call_args.args[1] == "onetwo"
+
+
+@pytest.mark.asyncio
+async def test_native_timeout_releases_write_lock_for_next_frame():
+    transport = _make_transport(f"{_VALID_URL}?ack=aps")
+    transport._APS_TIMEOUT = 0.01
+    cluster = MagicMock()
+    cluster.client_commands = {2: object()}
+
+    async def never_confirms(*args, **kwargs):
+        await asyncio.Event().wait()
+
+    cluster.client_command = AsyncMock(side_effect=never_confirms)
+    transport._get_active_write_cluster = MagicMock(return_value=cluster)
+    with pytest.raises(exc.TransportZigbeeError):
+        await transport._write_frame("first")
+    assert not transport._write_lock.locked()
+    cluster.client_command.side_effect = None
+    await transport._write_frame("next")
+    assert cluster.client_command.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_native_mode_selection_is_a_single_aps_command():
+    transport = _make_transport(f"{_VALID_URL}?ack=aps")
+    cluster = MagicMock()
+    cluster.client_commands = {3: object()}
+    cluster.client_command = AsyncMock()
+    transport._get_active_write_cluster = MagicMock(return_value=cluster)
+    await transport._enable_native_mode()
+    cluster.client_command.assert_awaited_once_with(
+        3,
+        True,
+        expect_reply=False,
+        ask_for_ack=True,
+        disable_default_response=True,
+    )
