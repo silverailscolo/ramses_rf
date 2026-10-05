@@ -118,6 +118,7 @@ class Action(StrEnum):
     SET_BYPASS_POSITION = "set_bypass_position"
     SET_FAN_PARAM = "set_fan_param"
     GET_FAN_PARAM = "get_fan_param"
+    GET_HVAC_FAN_10D0 = "get_hvac_fan_10d0"
     GET_HVAC_FAN_31DA = "get_hvac_fan_31da"
     SET_PROGRAM_ENABLED = "set_program_enabled"
 

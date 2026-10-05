@@ -576,6 +576,19 @@ def test_build_set_fan_param(snapshot: Any) -> None:
     assert dto.payload == "00003100100000001E0000000000000708000000010001"
 
 
+def test_build_get_fan_10d0(snapshot: Any) -> None:
+    intent = Intent(
+        src=Address("18:000730"),
+        dst=Address("32:111111"),
+        action=Action.GET_HVAC_FAN_10D0,
+        data={},
+    )
+    dto = build_dto(intent)
+    assert str(dto.verb) == Verb.RQ
+    assert str(dto.code) == Code._10D0
+    assert dto.payload == "00"
+
+
 def test_build_get_hvac_fan_31da(snapshot: Any) -> None:
     intent = Intent(
         src=Address("32:111111"),
