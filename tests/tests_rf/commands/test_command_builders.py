@@ -9,6 +9,7 @@ from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent
 from ramses_rf.const import ZON_MODE_MAP, Code, Verb
 from ramses_rf.enums import Action
+from ramses_rf.payloads.hvac import HvacBypassPositionPayload
 from ramses_rf.strategies import OrconHrc350Strategy, OrconStrategy
 from ramses_tx.const import FaultDeviceClass, FaultState, FaultType
 from ramses_tx.packet import Packet
@@ -498,7 +499,7 @@ def test_build_set_bypass_position(snapshot: Any) -> None:
     dto = build_dto(intent)
     assert str(dto.verb) == Verb.W_
     assert str(dto.code) == Code._22F7
-    assert dto.payload == "00FF"
+    assert dto.payload == "00FFEF"
 
 
 def test_build_set_program_enabled_true(snapshot: Any) -> None:
@@ -665,12 +666,12 @@ def test_build_set_fan_mode_exhaustive(
 @pytest.mark.parametrize(
     ("data", "expected_payload"),
     [
-        ({"bypass_position": None}, "00FF"),
-        ({"bypass_position": 0.0}, "0000"),
-        ({"bypass_position": 1.0}, "00C8"),
-        ({"bypass_mode": "auto"}, "00FF"),
-        ({"bypass_mode": "off"}, "0000"),
-        ({"bypass_mode": "on"}, "00C8"),
+        ({"bypass_position": None}, "00FFEF"),
+        ({"bypass_position": 0.0}, "0000EF"),
+        ({"bypass_position": 1.0}, "00C8EF"),
+        ({"bypass_mode": "auto"}, "00FFEF"),
+        ({"bypass_mode": "off"}, "0000EF"),
+        ({"bypass_mode": "on"}, "00C8EF"),
     ],
 )
 def test_build_set_bypass_position_exhaustive(
@@ -686,6 +687,8 @@ def test_build_set_bypass_position_exhaustive(
     assert str(dto.verb) == Verb.W_
     assert str(dto.code) == Code._22F7
     assert dto.payload == expected_payload
+    # the parser must accept the builder's own output (issue 1298)
+    HvacBypassPositionPayload.from_bytes(bytes.fromhex(dto.payload))
 
 
 @pytest.mark.parametrize(

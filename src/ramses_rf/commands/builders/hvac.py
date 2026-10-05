@@ -328,7 +328,7 @@ def build_set_bypass_position(intent: Command) -> CommandDTO:
         addr2=addr2,
         addr3=addr3,
         code=Code._22F7,
-        payload=f"00{pos_str}",
+        payload=f"00{pos_str}EF",
         priority=Priority.DEFAULT,
         num_repeats=DEFAULT_NUM_REPEATS,
     )
