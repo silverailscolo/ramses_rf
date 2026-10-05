@@ -157,6 +157,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     _SLUG: str = DevType.FAN
 
     # FAN-specific instance attributes (initialized in _init_fan_state)
+    _supports_10D0: bool
     _supports_2411: bool
     _params_2411: dict[str, float]
     _initialized_callback: Callable[[], None] | None
@@ -180,6 +181,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
     def _init_fan_state(self) -> None:
         """Initialize FAN-specific instance attributes (idempotent)."""
+        self.__dict__.setdefault("_supports_10D0", False)
         self.__dict__.setdefault("_supports_2411", False)
         self.__dict__.setdefault("_params_2411", {})
         self.__dict__.setdefault("_initialized_callback", None)
@@ -354,6 +356,15 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         return self._supports_2411
 
     @property
+    def supports_10D0(self) -> bool:
+        """Return whether this device supports 10D0 Filter RP.
+
+        :return: True if the device supports 10D0 filter state, False otherwise
+        :rtype: bool
+        """
+        return self._supports_10D0
+
+    @property
     def hgi(self) -> Any | None:
         """Return the HGI (Home Gateway Interface) device if available.
 
@@ -369,6 +380,34 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         ):
             self._hgi = self._gateway.hgi
         return self._hgi
+
+    async def async_probe_10d0_support(self) -> bool:
+        """Send initial 10D0 RQ to probe for Filter Remaining support.
+
+        This method is called by ramses_cc during FAN device initialization to
+        probe for 10D0 (Filter) support before entity creation.
+
+        :return: True if probe was sent successfully (not if device supports 10D0)
+        :rtype: bool
+        """
+        if self._supports_10D0:
+            return True  # Already confirmed
+
+        # Send RQ for Filter Remaining to probe support
+        try:
+            intent = Intent(
+                src=Address(self.hgi.id) if self.hgi else HGI_DEV_ADDR,
+                dst=Address(self.id),
+                action=Action.GET_HVAC_FAN_10D0,
+                data={},
+            )
+            await self._gateway.dispatcher.send(intent)
+            _LOGGER.debug("Sent 10D0 discovery probe to %s", self.id)
+            return True
+
+        except Exception as ex:
+            _LOGGER.debug("Failed to send 10D0 probe to %s: %s", self.id, ex)
+            return False
 
     async def async_probe_2411_support(self) -> bool:
         """Send initial 2411 RQ to probe for parameter support.
