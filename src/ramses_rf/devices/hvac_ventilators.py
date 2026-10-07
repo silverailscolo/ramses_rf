@@ -112,7 +112,10 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         :rtype: float | None
         """
         # Mark that we support 10D0 Filter Remaining
-        if not self._supports_10d0 and self.hvac_state.filter_remaining_days:
+        if (
+            not self._supports_10d0
+            and self.hvac_state.filter_remaining_percent
+        ):
             self._supports_10d0 = True
             _LOGGER.debug("Device %s supports 10D0 Filter Change", self.id)
 
