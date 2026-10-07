@@ -124,6 +124,58 @@ class MqttCallbackPoolAdapter:
             return None
         return self._pool._child_by_id(idx)
 
+    def remove_child(self, child_id: str) -> bool:
+        """Remove the pool child for a configured HGI at runtime.
+
+        Tombstones the pool child and drops the HGI mapping so
+        subsequent ``on_child_*`` callbacks for it warn and no-op
+        (issue 1261).
+
+        :param child_id: The configured logical child ID (HGI ID).
+        :returns: ``True`` if a child was removed, ``False`` if the
+            HGI was not registered.
+        """
+        idx = self._hgi_to_child.pop(child_id, None)
+        if idx is None:
+            return False
+        removed = self._pool.remove_child(idx)
+        _LOGGER.info(
+            "MqttCallbackPool: removed child %d for HGI %s",
+            idx,
+            child_id,
+        )
+        return removed
+
+    def add_child(self, hgi_id: str, *, accepted: bool | None = None) -> int:
+        """Register a callback-driven child for an HGI at runtime.
+
+        Appends a new ``PoolChild`` via
+        :meth:`PooledTransport.add_callback_child` and maps the HGI
+        so subsequent ``on_child_*`` callbacks resolve it.  Use for
+        HGIs discovered (and accepted) after pool construction
+        (issue 1261).
+
+        :param hgi_id: The HGI device ID to add.
+        :param accepted: Explicit acceptance override.  ``None``
+            defers to the pool's ``_accepted_hgis`` rule.
+        :returns: The new child's stable pool ID, or the existing
+            ID if the HGI was already registered.
+        """
+        if hgi_id in self._hgi_to_child:
+            return self._hgi_to_child[hgi_id]
+        child_idx = self._pool.add_callback_child(hgi_id)
+        self._hgi_to_child[hgi_id] = child_idx
+        if accepted is not None:
+            self._pool._child_by_id(child_idx).accepted = accepted
+        _LOGGER.info(
+            "MqttCallbackPool: added child %d for HGI %s at runtime "
+            "(accepted=%s)",
+            child_idx,
+            hgi_id,
+            self._pool._child_by_id(child_idx).accepted,
+        )
+        return child_idx
+
     # -- Inbound callback contract ---------------------------------------
 
     def on_child_online(

@@ -26,6 +26,8 @@ from ramses_rf.const import (
     SZ_FAN_MODE,
     SZ_FAN_RATE,
     SZ_FILTER_DIRTY,
+    SZ_FILTER_REMAINING,
+    SZ_FILTER_REMAINING_PERCENT,
     SZ_FROST_CYCLE,
     SZ_HAS_FAULT,
     SZ_INDOOR_HUMIDITY,
@@ -73,10 +75,12 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
 
     _SLUG: str = DevType.FAN
 
+    _supports_10d0: bool = False
+
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
-        """Initialize the FilterChange class and start dayly polling.
+        """Initialize the FilterChange class and start daily polling.
 
         :param args: Positional arguments passed to the parent class
         :param traits: Strictly typed traits object for device creation
@@ -93,6 +97,11 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
                  not available
         :rtype: int | None
         """
+        # Mark that we support 10D0 Filter Remaining
+        if not self._supports_10d0 and self.hvac_state.filter_remaining_days:
+            self._supports_10d0 = True
+            _LOGGER.debug("Device %s supports 10D0 Filter Change", self.id)
+
         return self.hvac_state.filter_remaining_days
 
     async def filter_remaining_percent(self) -> float | None:
@@ -102,6 +111,11 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
                  not available
         :rtype: float | None
         """
+        # Mark that we support 10D0 Filter Remaining
+        if not self._supports_10d0 and self.hvac_state.filter_remaining_days:
+            self._supports_10d0 = True
+            _LOGGER.debug("Device %s supports 10D0 Filter Change", self.id)
+
         return self.hvac_state.filter_remaining_percent
 
     @property
@@ -180,6 +194,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
     def _init_fan_state(self) -> None:
         """Initialize FAN-specific instance attributes (idempotent)."""
+        self.__dict__.setdefault("_supports_10d0", False)
         self.__dict__.setdefault("_supports_2411", False)
         self.__dict__.setdefault("_params_2411", {})
         self.__dict__.setdefault("_initialized_callback", None)
@@ -354,6 +369,15 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         return self._supports_2411
 
     @property
+    def supports_10d0(self) -> bool:
+        """Return whether this device supports 10D0 Filter RP.
+
+        :return: True if the device supports 10D0 filter state, False otherwise
+        :rtype: bool
+        """
+        return self._supports_10d0
+
+    @property
     def hgi(self) -> Any | None:
         """Return the HGI (Home Gateway Interface) device if available.
 
@@ -369,6 +393,34 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         ):
             self._hgi = self._gateway.hgi
         return self._hgi
+
+    async def async_probe_10d0_support(self) -> bool:
+        """Send initial 10D0 RQ to probe for Filter Remaining support.
+
+        This method is called by ramses_cc during FAN device initialization to
+        probe for 10D0 (Filter) support before entity creation.
+
+        :return: True if probe was sent successfully (not if device supports 10D0)
+        :rtype: bool
+        """
+        if self._supports_10d0:
+            return True  # Already confirmed
+
+        # Send RQ 10D0 Filter Remaining to probe support
+        try:
+            intent = Intent(
+                src=Address(self.hgi.id) if self.hgi else HGI_DEV_ADDR,
+                dst=Address(self.id),
+                action=Action.GET_HVAC_FAN_10D0,
+                data={},
+            )
+            await self._gateway.dispatcher.send(intent)
+            _LOGGER.debug("Sent 10D0 discovery probe to %s", self.id)
+            return True
+
+        except Exception as ex:
+            _LOGGER.debug("Failed to send 10D0 probe to %s: %s", self.id, ex)
+            return False
 
     async def async_probe_2411_support(self) -> bool:
         """Send initial 2411 RQ to probe for parameter support.
@@ -875,8 +927,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             SZ_FAN_MODE: await self.fan_mode(),
             SZ_FAN_RATE: await self.fan_rate(),
             SZ_FILTER_DIRTY: await self.filter_dirty(),
-            "filter_remaining": await self.filter_remaining(),
-            "filter_remaining_percent": await self.filter_remaining_percent(),
+            SZ_FILTER_REMAINING: await self.filter_remaining(),
+            SZ_FILTER_REMAINING_PERCENT: await self.filter_remaining_percent(),
             SZ_FROST_CYCLE: await self.frost_cycle(),
             SZ_HAS_FAULT: await self.has_fault(),
             SZ_INDOOR_HUMIDITY: await self.indoor_humidity(),

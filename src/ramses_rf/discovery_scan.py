@@ -143,7 +143,7 @@ _HVAC_PARENT_INFERENCE_CODES: frozenset[Code | str] = frozenset(
         Code._22F1,  # fan_mode
         Code._31E0,  # vent_demand
         Code._31DA,  # fan_status
-        Code._10D0,  # outside_temp
+        Code._10D0,  # filter_change
         Code._2411,  # fan_params — FAN RP to REM's RQ, most common directed exchange
     }
 )

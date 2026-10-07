@@ -142,6 +142,29 @@ async def test_hvac_ventilator_set_fan_mode_dispatches_intent(
 
 
 @pytest.mark.asyncio
+async def test_hvac_ventilator_probe_10d0_dispatches_intent(
+    mock_gateway: MagicMock,
+) -> None:
+    """Verify HvacVentilator.async_probe_10d0_support dispatches Action.GET_HVAC_FAN_31DA."""
+    # Arrange
+    vent = HvacVentilator(mock_gateway, Address("37:153226"))
+    packet = Packet.from_port(
+        dt.now(),
+        "000 RP --- 37:153226 18:130140 --:------ 10D0 006 00FEFE79FFFF",
+    )
+    mock_gateway._async_send_dto.return_value = packet
+
+    # Act
+    success = await vent.async_probe_10d0_support()
+
+    # Assert
+    assert success is True
+    assert mock_gateway._async_send_dto.await_count == 1
+    call_dto: CommandDTO = mock_gateway._async_send_dto.call_args[0][0]
+    assert call_dto.code == Code._10D0
+
+
+@pytest.mark.asyncio
 async def test_hvac_ventilator_probe_2411_dispatches_intent(
     mock_gateway: MagicMock,
 ) -> None:

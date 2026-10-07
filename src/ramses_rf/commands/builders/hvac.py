@@ -328,7 +328,7 @@ def build_set_bypass_position(intent: Command) -> CommandDTO:
         addr2=addr2,
         addr3=addr3,
         code=Code._22F7,
-        payload=f"00{pos_str}",
+        payload=f"00{pos_str}EF",
         priority=Priority.DEFAULT,
         num_repeats=DEFAULT_NUM_REPEATS,
     )
@@ -511,6 +511,29 @@ def build_get_fan_param(intent: Command) -> CommandDTO:
         addr2=addr2,
         addr3=addr3,
         code=Code._2411,
+        payload=payload,
+        priority=Priority.DEFAULT,
+        num_repeats=DEFAULT_NUM_REPEATS,
+    )
+
+
+def build_get_hvac_fan_10d0(intent: Command) -> CommandDTO:
+    """Translate a GET_HVAC_FAN_10D0 intent into a CommandDTO.
+
+    :param intent: The command intent containing one HVAC state parameter.
+    :type intent: Command
+    :returns: A populated CommandDTO containing a serialized state payload.
+    :rtype: CommandDTO
+    """
+    payload = "00"
+
+    addr1, addr2, addr3 = resolve_addrs(intent.src, intent.src)
+    return CommandDTO(
+        verb=RQ,
+        addr1=addr1,
+        addr2=addr2,
+        addr3=addr3,
+        code=Code._10D0,
         payload=payload,
         priority=Priority.DEFAULT,
         num_repeats=DEFAULT_NUM_REPEATS,
