@@ -140,6 +140,7 @@ class FakeDevice:
         self.demand_state: Any = None  # set by tests that need it
         self.tcs: Any | None = None
         self.events: list[StateUpdatedEvent] = []
+        self._supports_10d0: bool = False
 
     def apply_state_update(self, event: StateUpdatedEvent) -> None:
         """Accept an immutable state event and apply it to the read-model.
@@ -404,7 +405,7 @@ def test_worker_hvac_state_parsing() -> None:
 
     mock_msg = MockMessage(
         code=Code._31D9,
-        verb="I",
+        verb=Verb.I_,
         payload=hvac_payload,
         src_id=device.id,
     )
@@ -429,7 +430,6 @@ def test_worker_hvac_state_parses_10d0_support() -> None:
     device = FakeDevice()
     device.id = "32:123456"
     device._SLUG = DevType.FAN
-    device._supports_10d0 = False
 
     registry = FakeRegistry(device)
     gwy_adapter = FakeGatewayAdapter(registry)
@@ -441,7 +441,7 @@ def test_worker_hvac_state_parses_10d0_support() -> None:
 
     mock_msg = MockMessage(
         code=Code._10D0,
-        verb="RP",
+        verb=Verb.RP,
         payload=hvac_payload,
         src_id=device.id,
     )
