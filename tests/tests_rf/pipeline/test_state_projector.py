@@ -40,6 +40,7 @@ from ramses_rf.const import (
     SZ_REL_MODULATION_LEVEL,
     SZ_RELAY_DEMAND,
     SZ_REMAINING_DAYS,
+    SZ_REMAINING_PERCENT,
     SZ_SETPOINT,
     SZ_TICKER,
     SZ_VALUE,
@@ -420,6 +421,38 @@ def test_worker_hvac_state_parsing() -> None:
 
     assert len(device.events) == 1
     assert isinstance(device.events[0].state, HvacState)
+
+
+def test_worker_hvac_state_parses_10d0_support() -> None:
+    """Verify that the worker sets HVAC 10D0 flag on device."""
+    # Arrange
+    device = FakeDevice()
+    device.id = "32:123456"
+    device._SLUG = DevType.FAN
+    device._supports_10d0 = False
+
+    registry = FakeRegistry(device)
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+
+    worker = StateProjector(gwy_adapter, queue)
+
+    hvac_payload = {SZ_REMAINING_DAYS: 120, SZ_REMAINING_PERCENT: None}
+
+    mock_msg = MockMessage(
+        code=Code._10D0,
+        verb="RP",
+        payload=hvac_payload,
+        src_id=device.id,
+    )
+
+    # Act
+    worker._update_hvac_state(device, mock_msg.payload, mock_msg)
+
+    # Assert
+    assert device.hvac_state.filter_remaining_days == 120
+
+    assert device._supports_10d0 is True
 
 
 def test_worker_opentherm_modulation_keys_parity() -> None:
