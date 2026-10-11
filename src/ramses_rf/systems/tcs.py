@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime as dt, timedelta as td
+from datetime import UTC, datetime as dt, timedelta as td
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -442,15 +442,18 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         # RQ --- 30:185469 01:037519 --:------ 0006 001 00
         # RP --- 01:037519 30:185469 --:------ 0006 004 000500E6
 
-        if (
-            not force_io
-            and self._msg_0006
-            and self._msg_0006.dtm > dt.now().astimezone() - td(minutes=3)
-        ):
-            return (
-                self._msg_0006.payload[SZ_CHANGE_COUNTER],
-                False,
-            )  # global_ver, did_io
+        if not force_io and self._msg_0006:
+            msg_dtm = self._msg_0006.dtm
+            now = (
+                dt.now(UTC).astimezone(msg_dtm.tzinfo)
+                if msg_dtm.tzinfo is not None
+                else dt.now()
+            )
+            if msg_dtm > now - td(minutes=3):
+                return (
+                    self._msg_0006.payload[SZ_CHANGE_COUNTER],
+                    False,
+                )  # global_ver, did_io
 
         packet = await send_system_intent(
             self, Action.GET_SCHEDULE_VERSION, data={}, wait_for_reply=True

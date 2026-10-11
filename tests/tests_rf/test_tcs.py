@@ -2,7 +2,7 @@
 """RAMSES RF - Unit tests for Evohome TCS system operations."""
 
 import asyncio
-from datetime import datetime as dt
+from datetime import UTC, datetime as dt
 from typing import Any, Final
 from unittest.mock import AsyncMock, PropertyMock, patch
 
@@ -11,6 +11,7 @@ import pytest
 from ramses_rf import Gateway
 from ramses_rf.const import Code
 from ramses_rf.gateway import GatewayConfig
+from ramses_rf.messages import Message
 from ramses_rf.systems import Evohome
 from ramses_tx import Packet
 from ramses_tx.address import HGI_DEVICE_ID, Address
@@ -83,3 +84,33 @@ async def test_tcs_lockless_concurrent_schedules(fake_evofw3: Gateway) -> None:
     assert results[0] == []
     assert results[1] == []
     assert not any(isinstance(r, Exception) for r in results)
+
+
+@pytest.mark.asyncio
+async def test_schedule_version_cached_aware_dtm(fake_evofw3: Gateway) -> None:
+    """Regression: cached 0006 messages may carry tz-aware timestamps.
+
+    Depending on the transport, packet dtms can be tz-aware; the
+    cached-value check in _schedule_version must not raise TypeError
+    comparing them with a naive dt.now().
+    """
+
+    # Arrange: Bootstrap TCS via packet ingestion
+    packet = Packet.from_port(dt.now(), PKT_3150)
+    fake_evofw3._engine._protocol.packet_received(packet)
+    await asyncio.sleep(0)
+
+    tcs: Evohome | None = fake_evofw3.tcs
+    assert isinstance(tcs, Evohome)
+
+    # Simulate a cached 0006 reply with a tz-aware timestamp
+    pkt_0006 = Packet.from_port(
+        dt.now(UTC), "RP --- 01:145038 18:123456 --:------ 0006 004 000500E6"
+    )
+    tcs._msg_0006 = Message._from_packet(pkt_0006)
+
+    # Act & Assert: must serve from cache without raising TypeError
+    global_ver, did_io = await tcs._schedule_version()
+
+    assert global_ver == 230
+    assert did_io is False
