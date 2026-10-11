@@ -548,6 +548,7 @@ class Zone(ZoneSchedule):
         super().__init__(tcs, zone_index)
 
         self._sensor: Device | None = None
+        self._declared_sensor_id: str | None = None
         self.actuators: list[Device] = []
         self.actuator_by_id: dict[DeviceIdT, Device] = {}
         self._heating_type: str | None = None
@@ -650,6 +651,7 @@ class Zone(ZoneSchedule):
         )
 
         if sensor_id := schema.get(SZ_SENSOR):
+            self._declared_sensor_id = str(sensor_id)
             sensor_kl = self._gateway.config.known_list.get(str(sensor_id), {})
             sensor_cls = sensor_kl.get(SZ_CLASS)
             is_ctrl = (

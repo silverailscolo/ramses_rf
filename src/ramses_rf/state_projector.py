@@ -353,8 +353,12 @@ def _resolve_logical_targets(
         ):
             parent_sensor = getattr(parent, "sensor", None)
             parent_actuators = getattr(parent, "actuators", [])
+            # A declared-but-unbindable sensor (e.g. a CTL used as room
+            # thermostat) must also block the sole-actuator fallback
+            # (ramses-rf/ramses_cc#1328).
             if src_dev is parent_sensor or (
                 parent_sensor is None
+                and getattr(parent, "_declared_sensor_id", None) is None
                 and len(parent_actuators) == 1
                 and src_dev in parent_actuators
             ):
