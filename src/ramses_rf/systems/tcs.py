@@ -445,7 +445,7 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         if (
             not force_io
             and self._msg_0006
-            and self._msg_0006.dtm > dt.now() - td(minutes=3)
+            and self._msg_0006.dtm > dt.now().astimezone() - td(minutes=3)
         ):
             return (
                 self._msg_0006.payload[SZ_CHANGE_COUNTER],
