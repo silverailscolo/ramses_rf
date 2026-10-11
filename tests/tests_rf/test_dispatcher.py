@@ -928,6 +928,7 @@ class TestResolveLogicalTargets:
         mock_trv.tcs = None
 
         mock_zone.sensor = None
+        mock_zone._declared_sensor_id = None
         mock_zone.actuators = [mock_trv]
 
         mock_gateway.device_registry.device_by_id = {
