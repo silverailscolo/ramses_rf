@@ -242,6 +242,7 @@ zigbee = ["zigpy>=2.0.0"]           # ZigbeeTransport (Phase 3) — provided by 
   module = "tests_rf.*"
 
   disable_error_code = [
+    "explicit-any",  #  mocks/fixtures legitimately carry Any
     "arg-type",  #     54
     "type-arg",  #     11
   ]
@@ -250,6 +251,7 @@ zigbee = ["zigpy>=2.0.0"]           # ZigbeeTransport (Phase 3) — provided by 
   module = "tests_tx.*"
 
   disable_error_code = [
+    "explicit-any",   #  mocks/fixtures legitimately carry Any
     "attr-defined",   #  MagicMock assertions on typed callables
     "method-assign",  #  assigning MagicMock to methods in tests
     "assignment",     #  assigning MagicMock to None-typed fields
@@ -258,6 +260,17 @@ zigbee = ["zigpy>=2.0.0"]           # ZigbeeTransport (Phase 3) — provided by 
     "union-attr",     #  accessing attrs on Any | None cluster mocks
     "arg-type",
     "type-arg",
+  ]
+
+[[tool.mypy.overrides]]
+  module = [
+    "tests_cli.*",
+    "utils.*",
+    "wip.*",
+  ]
+
+  disable_error_code = [
+    "explicit-any",  #  mocks/fixtures legitimately carry Any
   ]
 
 [[tool.mypy.overrides]]
