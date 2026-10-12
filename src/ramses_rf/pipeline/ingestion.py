@@ -539,8 +539,18 @@ class StateProjector:
                 Code._313F,
                 Code._2D49,
             ):
-                tcs_target = system_by_id.get(msg.src.id) or getattr(
-                    src_dev, "tcs", None
+                # A W/RQ echo is addressed to the CTL while src is the
+                # HGI, so resolve the TCS from the controller side (dst)
+                # too — else an echo for a secondary controller is
+                # dropped (multi-TCS schema).
+                # See: https://github.com/ramses-rf/ramses_rf/issues/1284
+                tcs_target = (
+                    system_by_id.get(msg.src.id)
+                    or getattr(src_dev, "tcs", None)
+                    or system_by_id.get(msg.dst.id)
+                    or getattr(
+                        registry.device_by_id.get(msg.dst.id), "tcs", None
+                    )
                 )
                 if tcs_target is None and len(systems) == 1:
                     tcs_target = systems[0]

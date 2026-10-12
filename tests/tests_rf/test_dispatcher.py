@@ -1080,6 +1080,90 @@ class TestResolveLogicalTargets:
         # Assert
         assert mock_zone in targets
 
+    def test_system_mode_echo_targets_dst_controller(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify a 2E04 W echo targets the addressed TCS, not the main one.
+
+        Regression test for https://github.com/ramses-rf/ramses_rf/issues/1284:
+        for a W 2E04 the echo's src is the HGI, so resolving the TCS via
+        src_dev alone lands the update on gateway.tcs — a mode set on a
+        secondary controller must not overwrite the main TCS's system_state.
+        """
+        # Arrange
+        mock_main_tcs = MagicMock()
+        mock_second_tcs = MagicMock()
+
+        mock_hgi = MagicMock()
+        mock_hgi.id = "18:001234"
+        mock_hgi.tcs = None
+
+        mock_ctl = MagicMock()
+        mock_ctl.id = "01:150003"
+        mock_ctl.type = "01"
+        mock_ctl.tcs = mock_second_tcs
+
+        mock_gateway.tcs = mock_main_tcs
+        mock_gateway.device_registry.device_by_id = {
+            mock_hgi.id: mock_hgi,
+            mock_ctl.id: mock_ctl,
+        }
+
+        msg = MagicMock()
+        msg.src.id = mock_hgi.id
+        msg.dst.id = mock_ctl.id
+        msg.code = Code._2E04
+        msg._has_array = False
+        payload = {"system_mode": "away", "until": None}
+
+        # Act
+        targets = dispatcher._resolve_logical_targets(
+            mock_gateway, msg, payload
+        )
+
+        # Assert
+        assert mock_second_tcs in targets
+        assert mock_main_tcs not in targets
+
+    def test_system_mode_rp_targets_src_controller(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify a 2E04 RP from a secondary controller targets its own TCS."""
+        # Arrange
+        mock_main_tcs = MagicMock()
+        mock_second_tcs = MagicMock()
+
+        mock_hgi = MagicMock()
+        mock_hgi.id = "18:001234"
+        mock_hgi.tcs = None
+
+        mock_ctl = MagicMock()
+        mock_ctl.id = "01:150003"
+        mock_ctl.type = "01"
+        mock_ctl.tcs = mock_second_tcs
+
+        mock_gateway.tcs = mock_main_tcs
+        mock_gateway.device_registry.device_by_id = {
+            mock_hgi.id: mock_hgi,
+            mock_ctl.id: mock_ctl,
+        }
+
+        msg = MagicMock()
+        msg.src.id = mock_ctl.id
+        msg.dst.id = mock_hgi.id
+        msg.code = Code._2E04
+        msg._has_array = False
+        payload = {"system_mode": "auto", "until": None}
+
+        # Act
+        targets = dispatcher._resolve_logical_targets(
+            mock_gateway, msg, payload
+        )
+
+        # Assert
+        assert mock_second_tcs in targets
+        assert mock_main_tcs not in targets
+
 
 class TestCommandDispatcherSend:
     """Test CommandDispatcher.send returns Message instances consistently."""
