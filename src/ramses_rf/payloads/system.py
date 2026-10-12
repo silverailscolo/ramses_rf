@@ -4,10 +4,12 @@ This module contains strongly-typed dataclass representations for system clock,
 device binding, fault log, and gateway heartbeat packet payloads.
 """
 
+from __future__ import annotations
+
 import re
 import struct
 from dataclasses import dataclass
-from typing import Any, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from ramses_rf.const import (
     DEV_ROLE_MAP,
@@ -28,11 +30,15 @@ from ramses_rf.const import (
 )
 from ramses_rf.enums import DevRole
 from ramses_rf.payloads.helpers import parse_fault_log_entry
+from ramses_rf.typing import PayloadT
 from ramses_tx.const import F9, FA, FC, RQ, FaultDeviceClass, Verb
 from ramses_tx.helpers import hex_from_dtm, hex_to_date, hex_to_dtm, hex_to_dts
 
 from .base import PayloadBase
 from .registry import register_payload
+
+if TYPE_CHECKING:
+    from ramses_rf.messages.base import Message
 
 # ----------------------------------------------------------------------
 
@@ -135,13 +141,13 @@ class SystemClockPayload(PayloadBase):
             self.day_of_week,
         )
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert system clock payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded system clock dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         if self._raw_bytes is not None and len(self._raw_bytes) >= 8:
             b = self._raw_bytes
@@ -242,7 +248,7 @@ class SystemChangeCounterPayload(PayloadBase):
         hdr: int = 0,
         h1: int = 0,
         h2: int = 5,
-    ) -> "SystemChangeCounterPayload":
+    ) -> SystemChangeCounterPayload:
         """Construct SystemChangeCounter payload variant dynamically from arguments."""
         if cls is not SystemChangeCounterPayload:
             return super().__new__(cls)
@@ -250,12 +256,12 @@ class SystemChangeCounterPayload(PayloadBase):
             h1=h1, h2=h2, change_counter=change_counter
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert system change counter payload to legacy dictionary layout."""
         return {"change_counter": getattr(self, "change_counter", None)}
 
     @classmethod
-    def from_bytes(cls, raw_data: bytes) -> "SystemChangeCounterPayload":
+    def from_bytes(cls, raw_data: bytes) -> SystemChangeCounterPayload:
         """Unpack system change counter binary payload, dispatching by length."""
         if len(raw_data) < 3:
             raise ValueError(
@@ -411,13 +417,13 @@ class OemCodePayload(PayloadBase):
         """
         return bytes.fromhex(self.payload_hex)
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert OEM code payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded OEM code dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {"payload": self.payload_hex}
 
@@ -573,7 +579,7 @@ class SystemLanguagePayload(PayloadBase):
     @classmethod
     def from_bytes(
         cls, raw_data: bytes
-    ) -> "SystemLanguage2BPayload | SystemLanguage3BPayload":
+    ) -> SystemLanguage2BPayload | SystemLanguage3BPayload:
         """Unpack system language binary payload by length."""
         if len(raw_data) >= 3:
             return SystemLanguage3BPayload.from_bytes(raw_data)
@@ -642,7 +648,7 @@ class SystemLanguage2BPayload(SystemLanguagePayload):
             l_code = 0
         return struct.pack(self._STRUCT_FMT, 0x00, l_code)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert system language payload to legacy dictionary layout."""
         return {"language": self.language}
 
@@ -695,7 +701,7 @@ class SystemLanguage3BPayload(SystemLanguagePayload):
             return b"\x00\x00\x00"
         return b"\x00" + self.language.encode("latin-1")[:2]
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert system language payload to legacy dictionary layout."""
         return {"language": self.language}
 
@@ -877,13 +883,13 @@ class SystemFaultLogPayload(PayloadBase):
         """
         return bytes([self.log_index]) + self.log_data
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert fault log payload to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded fault log dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         raw_hex = (bytes([self.log_index]) + self.log_data).hex().upper()
         log_index_str = (
@@ -1009,13 +1015,13 @@ class SystemLogIndexPayload(PayloadBase):
             self._STRUCT_FMT, self.domain_index, self.log_pointer
         )
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert system log index payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded log index dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         if self.raw_bytes is not None and len(self.raw_bytes) == 9:
             raw_hex = self.raw_bytes.hex().upper()
@@ -1157,15 +1163,15 @@ class DeviceBatteryPayload(PayloadBase):
         raw_flags = 0x00 if self.battery_low else 0x01
         return bytes([self.header, raw_level, raw_flags])
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert 1060 payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded battery dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
-        result: dict[str, Any] = {
+        result: PayloadT = {
             "battery_low": self.battery_low,
             "battery_level": self.battery_level,
         }
@@ -1234,11 +1240,11 @@ class SystemDeviceInfoPayload(PayloadBase):
             + self.info_bytes
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert device info payload to legacy dictionary layout.
 
         :returns: Decoded device info dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         raw_payload = bytes([self.info_type]) + self.info_bytes
         hex_str = raw_payload.hex().upper()
@@ -1324,11 +1330,11 @@ class SystemOutdoorTempPayload(PayloadBase):
         )
         return struct.pack(self._STRUCT_FMT, temp_raw)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert outdoor temperature payload to legacy dictionary layout.
 
         :returns: Decoded outdoor temperature dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {"outdoor_temp": self.outdoor_temp}
 
@@ -1356,7 +1362,7 @@ class SystemSyncHeartbeatPayload(PayloadBase):
     @classmethod
     def from_bytes(
         cls, raw_data: bytes
-    ) -> "SystemSyncHeartbeat1BPayload | SystemSyncHeartbeat3BPayload":
+    ) -> SystemSyncHeartbeat1BPayload | SystemSyncHeartbeat3BPayload:
         """Unpack system sync heartbeat binary payload by length."""
         if len(raw_data) >= 3:
             return SystemSyncHeartbeat3BPayload.from_bytes(raw_data)
@@ -1419,7 +1425,7 @@ class SystemSyncHeartbeat1BPayload(SystemSyncHeartbeatPayload):
         """
         return struct.pack(self._STRUCT_FMT, self.sync_sequence)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert system sync heartbeat payload to legacy dictionary layout."""
         return {"sync_sequence": self.sync_sequence}
 
@@ -1478,7 +1484,7 @@ class SystemSyncHeartbeat3BPayload(SystemSyncHeartbeatPayload):
         )
         return struct.pack(self._STRUCT_FMT, self.sync_sequence, secs_raw)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert system sync heartbeat payload to legacy dictionary layout."""
         return {"remaining_seconds": self.remaining_seconds}
 
@@ -1511,7 +1517,7 @@ class SystemConfigPayload(PayloadBase):
     @classmethod
     def from_bytes(
         cls, raw_data: bytes
-    ) -> "SystemConfig2BPayload | SystemConfigVarPayload":
+    ) -> SystemConfig2BPayload | SystemConfigVarPayload:
         """Unpack system config binary payload by length."""
         if len(raw_data) > 2:
             return SystemConfigVarPayload.from_bytes(raw_data)
@@ -1582,7 +1588,7 @@ class SystemConfig2BPayload(SystemConfigPayload):
             self._STRUCT_FMT, self.config_index, self.config_value
         )
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert system config payload to legacy dictionary layout."""
         if msg and hasattr(msg, "src"):
             dev_type = (
@@ -1594,7 +1600,7 @@ class SystemConfig2BPayload(SystemConfigPayload):
 
         mode_code = f"{self.config_index:02X}"
         if mode_code in SYS_MODE_MAP:
-            result: dict[str, Any] = {SZ_SYSTEM_MODE: SYS_MODE_MAP[mode_code]}
+            result: PayloadT = {SZ_SYSTEM_MODE: SYS_MODE_MAP[mode_code]}
             if mode_code not in (
                 SYS_MODE_MAP.AUTO,
                 SYS_MODE_MAP.HEAT_OFF,
@@ -1666,7 +1672,7 @@ class SystemConfigVarPayload(SystemConfigPayload):
             self._STRUCT_FMT, self.config_index, self.config_value
         ) + (self.raw_extra or b"")
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert system config payload to legacy dictionary layout."""
         if msg and hasattr(msg, "src"):
             dev_type = (
@@ -1678,7 +1684,7 @@ class SystemConfigVarPayload(SystemConfigPayload):
 
         mode_code = f"{self.config_index:02X}"
         if mode_code in SYS_MODE_MAP:
-            result: dict[str, Any] = {SZ_SYSTEM_MODE: SYS_MODE_MAP[mode_code]}
+            result: PayloadT = {SZ_SYSTEM_MODE: SYS_MODE_MAP[mode_code]}
             if mode_code not in (
                 SYS_MODE_MAP.AUTO,
                 SYS_MODE_MAP.HEAT_OFF,
@@ -1725,7 +1731,7 @@ class SystemDateTimePayload(PayloadBase):
     @classmethod
     def from_bytes(
         cls, raw_data: bytes
-    ) -> "SystemDateTime2BPayload | SystemDateTime9BPayload":
+    ) -> SystemDateTime2BPayload | SystemDateTime9BPayload:
         """Unpack system date & time payload, dispatching by length."""
         if len(raw_data) >= 9:
             return SystemDateTime9BPayload.from_bytes(raw_data)
@@ -1788,11 +1794,11 @@ class SystemDateTime2BPayload(SystemDateTimePayload):
         """
         return struct.pack(self._STRUCT_FMT, self.domain_index, 0x00)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert date & time payload to legacy dictionary layout.
 
         :returns: Decoded system date & time dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {SZ_IS_DAYLIGHT_SAVING: None}
 
@@ -1872,13 +1878,13 @@ class SystemDateTime9BPayload(SystemDateTimePayload):
             self._STRUCT_FMT, self.domain_index, 0xF0, 0, 0, 0, 0, 0, 0, 0
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert system date & time payload to legacy dictionary layout.
 
         :returns: Decoded system date & time dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
-        result: dict[str, Any] = {}
+        result: PayloadT = {}
         if self.datetime_str is not None:
             result["datetime"] = self.datetime_str
         result[SZ_IS_DAYLIGHT_SAVING] = self.is_daylight_saving
@@ -1989,13 +1995,13 @@ class SystemOpenThermBridgePayload(PayloadBase):
         """
         return self.raw_bytes
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert 3222 payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded 3222 dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         b = self.raw_bytes
         if len(b) >= 4:
@@ -2064,14 +2070,14 @@ class PuzzlePayload(PayloadBase):
             + self.payload_data
         )
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert puzzle diagnostic payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded puzzle diagnostic dictionary with hex-encoded
             byte fields (JSON-serialisable).
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {
             "msg_type": self.msg_type.hex().upper(),
@@ -2163,16 +2169,16 @@ class RelayFailsafePayload(PayloadBase):
             int(self.failsafe_enabled),
         )
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert relay failsafe payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded relay failsafe dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         index_str = f"{self.domain_or_zone_index:02X}"
-        result: dict[str, Any] = {
+        result: PayloadT = {
             SZ_DOMAIN_INDEX: index_str,
             "failsafe_enabled": self.failsafe_enabled,
         }

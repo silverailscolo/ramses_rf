@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from ramses_rf.const import (
     DEV_ROLE_MAP,
@@ -21,6 +20,7 @@ from ramses_rf.enums import TopologyAction
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
 from ramses_rf.pipeline.topology_handlers.base import TopologyHandler
+from ramses_rf.typing import PayloadT
 from ramses_tx.const import Code
 from ramses_tx.typing import DeviceIdT
 
@@ -103,7 +103,7 @@ class UfhTopologyHandler(TopologyHandler):
 
         # 2. Extract circuit topology from 000C configuration packets
         if msg.header.code == Code._000C:
-            raw_data: Any = msg.data
+            raw_data: PayloadT = msg.data
             zone_type = (
                 raw_data.get(SZ_ZONE_TYPE)
                 if isinstance(raw_data, dict)

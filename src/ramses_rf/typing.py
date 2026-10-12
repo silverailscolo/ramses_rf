@@ -9,14 +9,22 @@ DeviceIdT: TypeAlias = TxDeviceIdT
 DevIndexT: TypeAlias = TxIndexT
 IndexT: TypeAlias = TxIndexT
 
-DeviceTraitsT: TypeAlias = dict[str, Any]
+DeviceTraitsT: TypeAlias = dict[  # type: ignore[explicit-any]  # heterogeneous traits
+    str, Any
+]
 DeviceListT: TypeAlias = dict[str, DeviceTraitsT]
 PollingIntervalsT: TypeAlias = dict[str, int]
 
 # Domain Payload Type Aliases
-HvacPayloadT: TypeAlias = dict[str, Any]
-OpenThermPayloadT: TypeAlias = dict[str, Any]
-HeatingPayloadT: TypeAlias = dict[str, Any]
+HvacPayloadT: TypeAlias = dict[  # type: ignore[explicit-any]  # heterogeneous payload
+    str, Any
+]
+OpenThermPayloadT: TypeAlias = dict[  # type: ignore[explicit-any]  # heterogeneous payload
+    str, Any
+]
+HeatingPayloadT: TypeAlias = dict[  # type: ignore[explicit-any]  # heterogeneous payload
+    str, Any
+]
 
 
 # For fingerprints.py
@@ -100,7 +108,12 @@ OuterSchedule: TypeAlias = WeeklyScheduleDict
 OuterScheduleT: TypeAlias = WeeklyScheduleDict | EmptySchedule
 
 
-PayloadT: TypeAlias = dict[str, Any]
+PayloadT: TypeAlias = dict[  # type: ignore[explicit-any]  # heterogeneous protocol payload
+    str, Any
+]
+SchemaT: TypeAlias = dict[  # type: ignore[explicit-any]  # heterogeneous schema tree
+    str, Any
+]
 PayloadSetT: TypeAlias = list[PayloadT | None]
 
 FragmentT: TypeAlias = str

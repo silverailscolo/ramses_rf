@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from datetime import datetime as dt
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -13,20 +14,24 @@ from typing import (
     runtime_checkable,
 )
 
-from ramses_tx import CommandDTO, Packet, Priority
+from ramses_rf.typing import SchemaT
+from ramses_tx import Code, CommandDTO, Packet, Priority
 
 from .messages import Message
 from .typing import DeviceIdT, DeviceListT
 
 # Callback type invoked when system topology/schema is updated dynamically
-SchemaUpdatedCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
+SchemaUpdatedCallback = Callable[[SchemaT], Awaitable[None] | None]
 
 if TYPE_CHECKING:
+    from .commands.core import Command
     from .commands.dispatcher import CommandDispatcher as CQRSDispatcher
     from .config import GatewayConfig
     from .devices.dev_base import Device, Fakeable
+    from .messages.core import Message as CoreMessage
     from .models import TopologyChangedEvent
     from .routing import StateHeader
+    from .systems.tcs import Evohome, SystemBase
     from .topology import Parent
 
 # Generic type variable for downcasting returned Device instances
@@ -38,7 +43,7 @@ class CommandDispatcher(Protocol):
 
     async def send(
         self,
-        intent: Any,
+        intent: Command,
         *,
         priority: Priority | None = None,
         wait_for_reply: bool | None = None,
@@ -58,7 +63,7 @@ class CommandDispatcher(Protocol):
 
     def send_background(
         self,
-        intent: Any,
+        intent: Command,
         *,
         priority: Priority | None = None,
         wait_for_reply: bool | None = None,
@@ -82,7 +87,7 @@ class ConversationManagerInterface(Protocol):
 
     async def track_intent(
         self,
-        intent: Any,
+        intent: Command,
         dto: CommandDTO | None = None,
         *,
         timeout: float | None = None,
@@ -139,7 +144,7 @@ class MessageStoreInterface(Protocol):
         """
         ...
 
-    def start_consumer(self, in_queue: asyncio.Queue[Any]) -> None:
+    def start_consumer(self, in_queue: asyncio.Queue[CoreMessage]) -> None:
         """Start asynchronous queue consumer task for SSOT ingestion.
 
         :param in_queue: The input queue for raw packet ingestion.
@@ -151,14 +156,14 @@ class MessageStoreInterface(Protocol):
 
     async def get(
         self,
-        msg: Any | None = None,
+        msg: Message | None = None,
         *,
-        dtm: Any | None = None,
+        dtm: dt | str | None = None,
         source: str | None = None,
         destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
-        context: Any | None = None,
+        context: object | None = None,
         hdr: str | StateHeader | None = None,
     ) -> tuple[Message, ...] | list[Message]:
         """Query matching messages from store.
@@ -186,16 +191,16 @@ class MessageStoreInterface(Protocol):
 
     async def rem(
         self,
-        msg: Any | None = None,
+        msg: Message | None = None,
         *,
-        dtm: Any | None = None,
+        dtm: dt | str | None = None,
         source: str | None = None,
         destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
-        context: Any | None = None,
+        context: object | None = None,
         hdr: str | None = None,
-    ) -> tuple[Any, ...] | None:
+    ) -> tuple[Message, ...] | None:
         """Remove matching messages from store.
 
         :param msg: An example message to match against.
@@ -222,12 +227,12 @@ class MessageStoreInterface(Protocol):
     async def contains(
         self,
         *,
-        dtm: Any | None = None,
+        dtm: dt | str | None = None,
         source: str | None = None,
         destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
-        context: Any | None = None,
+        context: object | None = None,
         hdr: str | None = None,
     ) -> bool:
         """Return True if store contains matching record.
@@ -251,7 +256,7 @@ class MessageStoreInterface(Protocol):
         """
         ...
 
-    async def get_rp_codes(self, parameters: tuple[str, ...]) -> list[Any]:
+    async def get_rp_codes(self, parameters: tuple[str, ...]) -> list[Code]:
         """Query response opcode codes.
 
         :param parameters: SQL parameters for opcode filtering.
@@ -261,7 +266,7 @@ class MessageStoreInterface(Protocol):
         """
         ...
 
-    async def all(self, include_expired: bool = False) -> tuple[Any, ...]:
+    async def all(self, include_expired: bool = False) -> tuple[Message, ...]:
         """Return all indexed messages.
 
         :param include_expired: Whether to include expired messages.
@@ -327,11 +332,11 @@ class DeviceInterface(Protocol):
         """
         ...
 
-    async def traits(self) -> dict[str, Any]:
+    async def traits(self) -> SchemaT:
         """Return the device traits.
 
         :returns: A dictionary of device traits.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         ...
 
@@ -341,7 +346,7 @@ class ControllerInterface(DeviceInterface, Protocol):
     """Interface for a RAMSES controller entity."""
 
     @property
-    def tcs(self) -> Any:
+    def tcs(self) -> SystemBase | None:
         """Return the parent heating system associated with this controller.
 
         :returns: The parent system, or None if unassociated.
@@ -363,7 +368,7 @@ class ParentInterface(Protocol):
         """
         ...
 
-    def _add_child(
+    def _add_child(  # type: ignore[explicit-any]  # any Child subtype
         self,
         child: Any,
         *,
@@ -373,7 +378,9 @@ class ParentInterface(Protocol):
         """Add a child entity to this parent registry."""
         ...
 
-    def _detach_child(self, child: Any) -> None:
+    def _detach_child(  # type: ignore[explicit-any]  # any Child subtype
+        self, child: Any
+    ) -> None:
         """Detach a child device from this Parent."""
         ...
 
@@ -426,7 +433,7 @@ class DeviceRegistryInterface(Protocol):
     """Interface for the Device Registry service."""
 
     @property
-    def devices(self) -> list[Any]:
+    def devices(self) -> list[Device]:
         """Return the list of devices.
 
         :returns: A list of registered device instances.
@@ -435,7 +442,7 @@ class DeviceRegistryInterface(Protocol):
         ...
 
     @property
-    def device_by_id(self) -> dict[DeviceIdT, Any]:
+    def device_by_id(self) -> dict[DeviceIdT, Device]:
         """Return the mapping of device IDs to devices.
 
         :returns: A dictionary mapping device IDs to devices.
@@ -444,7 +451,7 @@ class DeviceRegistryInterface(Protocol):
         ...
 
     @property
-    def system_by_id(self) -> dict[DeviceIdT, Any]:
+    def system_by_id(self) -> dict[DeviceIdT, Evohome]:
         """Return a mapping of device IDs to their associated systems.
 
         :returns: A dictionary mapping device IDs to systems.
@@ -453,7 +460,7 @@ class DeviceRegistryInterface(Protocol):
         ...
 
     @property
-    def systems(self) -> list[Any]:
+    def systems(self) -> list[Evohome]:
         """Return a list of all identified systems.
 
         :returns: A list of registered system instances.
@@ -461,7 +468,7 @@ class DeviceRegistryInterface(Protocol):
         """
         ...
 
-    def _add_device(self, device: Any) -> None:
+    def _add_device(self, device: Device) -> None:
         """Add a device to the registry."""
         ...
 
@@ -558,19 +565,19 @@ class DeviceRegistryInterface(Protocol):
         """
         ...
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return the parameters for all devices.
 
         :returns: A dictionary of parameters for all devices.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         ...
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the status for all devices.
 
         :returns: A dictionary of status data for all devices.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         ...
 

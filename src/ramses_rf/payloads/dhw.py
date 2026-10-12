@@ -4,15 +4,21 @@ This module contains strongly-typed dataclass representations for
 Domestic Hot Water packet payloads.
 """
 
+from __future__ import annotations
+
 import struct
 from dataclasses import dataclass
-from typing import Any, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from ramses_rf.const import SZ_ACTIVE, SZ_DHW_INDEX, SZ_MODE, SZ_UNTIL, Code
+from ramses_rf.typing import PayloadT
 from ramses_tx.helpers import hex_to_dtm
 
 from .base import PayloadBase, parse_index
 from .registry import register_payload
+
+if TYPE_CHECKING:
+    pass
 
 # ----------------------------------------------------------------------
 
@@ -81,11 +87,11 @@ class DhwTempPayload(PayloadBase):
             temp_raw = int(round(self.temperature * 100.0))
         return struct.pack(self._STRUCT_FMT, index, temp_raw)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert DHW temperature payload to legacy dictionary layout.
 
         :returns: Decoded DHW temperature dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {"temperature": self.temperature}
 
@@ -154,11 +160,11 @@ class DhwFlowRatePayload(PayloadBase):
         )
         return struct.pack(self._STRUCT_FMT, self.dhw_index, raw_val)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert DHW flow rate payload to legacy dictionary layout.
 
         :returns: Decoded DHW flow rate dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {"dhw_flow_rate": self.dhw_flow_rate}
 
@@ -266,7 +272,7 @@ class DhwParamsPayload(PayloadBase):
         setpoint: float | None = None,
         overrun: int = 0,
         differential: float = 0.0,
-    ) -> "DhwParams3BPayload | DhwParams6BPayload":
+    ) -> DhwParams3BPayload | DhwParams6BPayload:
         """Construct DhwParams payload variant dynamically from arguments."""
         index = parse_index(dhw_index)
         if overrun != 0 or differential != 0.0:
@@ -281,7 +287,7 @@ class DhwParamsPayload(PayloadBase):
     @classmethod
     def from_bytes(
         cls, raw_data: bytes
-    ) -> "DhwParams3BPayload | DhwParams6BPayload":
+    ) -> DhwParams3BPayload | DhwParams6BPayload:
         """Unpack DHW parameters binary payload, dispatching by length."""
         if len(raw_data) >= 6:
             return DhwParams6BPayload.from_bytes(raw_data)
@@ -354,7 +360,7 @@ class DhwParams3BPayload(DhwParamsPayload):
         )
         return struct.pack(self._STRUCT_FMT, index, sp_raw)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert 3-byte DHW parameters payload to legacy dictionary layout."""
         return {"setpoint": self.setpoint}
 
@@ -427,7 +433,7 @@ class DhwParams6BPayload(DhwParamsPayload):
             self._STRUCT_FMT, index, sp_raw, self.overrun, diff_raw
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert 6-byte DHW parameters payload to legacy dictionary layout."""
         return {
             "setpoint": self.setpoint,
@@ -462,7 +468,7 @@ class DhwStatePayload(PayloadBase):
         active_flag: int = 0,
         mode_value: int | None = None,
         raw_bytes: bytes | None = None,
-    ) -> "DhwStatePayload":
+    ) -> DhwStatePayload:
         """Construct DhwState payload variant dynamically from arguments."""
         if cls is not DhwStatePayload:
             return super().__new__(cls)
@@ -484,7 +490,7 @@ class DhwStatePayload(PayloadBase):
     @classmethod
     def from_bytes(
         cls, raw_data: bytes
-    ) -> "DhwState2BPayload | DhwState3BPayload | DhwStateOverridePayload":
+    ) -> DhwState2BPayload | DhwState3BPayload | DhwStateOverridePayload:
         """Unpack DHW state binary payload, dispatching by length."""
         if len(raw_data) >= 6:
             return DhwStateOverridePayload.from_bytes(raw_data)
@@ -538,9 +544,9 @@ class DhwState2BPayload(DhwStatePayload):
         """Pack 2-byte DHW state into binary payload."""
         return struct.pack(self._STRUCT_FMT, self.dhw_index, self.active_flag)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert 2-byte DHW state to legacy dictionary format."""
-        result: dict[str, Any] = {SZ_DHW_INDEX: f"{self.dhw_index:02X}"}
+        result: PayloadT = {SZ_DHW_INDEX: f"{self.dhw_index:02X}"}
         result[SZ_ACTIVE] = (
             None if self.active_flag == 0xFF else (self.active_flag == 0x01)
         )
@@ -593,9 +599,9 @@ class DhwState3BPayload(DhwStatePayload):
             self._STRUCT_FMT, self.dhw_index, self.active_flag, self.mode_value
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert 3-byte DHW state to legacy dictionary format."""
-        result: dict[str, Any] = {SZ_DHW_INDEX: f"{self.dhw_index:02X}"}
+        result: PayloadT = {SZ_DHW_INDEX: f"{self.dhw_index:02X}"}
         result[SZ_ACTIVE] = (
             None if self.active_flag == 0xFF else (self.active_flag == 0x01)
         )
@@ -664,9 +670,9 @@ class DhwStateOverridePayload(DhwStatePayload):
         """Pack extended DHW state into binary payload."""
         return self.raw_bytes
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert extended DHW state to legacy dictionary format."""
-        result: dict[str, Any] = {SZ_DHW_INDEX: f"{self.dhw_index:02X}"}
+        result: PayloadT = {SZ_DHW_INDEX: f"{self.dhw_index:02X}"}
         result[SZ_ACTIVE] = (
             None if self.active_flag == 0xFF else (self.active_flag == 0x01)
         )

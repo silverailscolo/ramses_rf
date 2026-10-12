@@ -59,6 +59,11 @@ from .inspect import (
 if TYPE_CHECKING:
     from _typeshed import SupportsRead
 
+CliKwargsT = dict[  # type: ignore[explicit-any]  # heterogeneous click/config bag
+    str, Any
+]
+CliObjT = tuple[CliKwargsT, CliKwargsT]
+
 
 _PROFILE_LIBRARY = False  # NOTE: for profiling of library
 
@@ -101,7 +106,9 @@ COLORS = {
     W_: Style.BRIGHT + Fore.MAGENTA,
 }
 
-CONTEXT_SETTINGS: dict[str, Any] = dict(help_option_names=["-h", "--help"])
+CONTEXT_SETTINGS: dict[str, list[str]] = dict(
+    help_option_names=["-h", "--help"]
+)
 
 LIB_KEYS = tuple(SCH_GLOBAL_CONFIG({}).keys()) + (SZ_SERIAL_PORT,)
 LIB_CFG_KEYS = tuple(SCH_GLOBAL_CONFIG({})[SZ_CONFIG].keys()) + (
@@ -111,7 +118,7 @@ LIB_CFG_KEYS = tuple(SCH_GLOBAL_CONFIG({})[SZ_CONFIG].keys()) + (
 
 def normalise_config(
     lib_config: dict[str, dict[str, str | bool | None]],
-) -> tuple[str | None, dict[str, Any] | None]:
+) -> tuple[str | None, CliKwargsT | None]:
     """Convert a HA config dict into the client library's own format.
 
     :param lib_config: The configuration dictionary from Home Assistant.
@@ -134,8 +141,8 @@ def normalise_config(
 
 
 def split_kwargs(
-    obj: tuple[dict[str, Any], dict[str, Any]], kwargs: dict[str, Any]
-) -> tuple[dict[str, Any], dict[str, Any]]:
+    obj: CliObjT, kwargs: CliKwargsT
+) -> tuple[CliKwargsT, CliKwargsT]:
     """Split kwargs into cli/library kwargs.
 
     :param obj: Tuple of CLI and library configuration dictionaries.
@@ -161,7 +168,10 @@ class DeviceIdParamType(click.ParamType[str]):
     name = "device_id"
 
     def convert(
-        self, value: str, parameter: Any, context: click.Context | None
+        self,
+        value: str,
+        parameter: click.Parameter | None,
+        context: click.Context | None,
     ) -> str:
         """Convert the value to a Device ID.
 
@@ -238,7 +248,7 @@ class DeviceIdParamType(click.ParamType[str]):
     help="display crazy things",
 )
 @click.pass_context
-async def cli(
+async def cli(  # type: ignore[explicit-any]  # heterogeneous click kwargs
     ctx: click.Context,
     /,
     config_file: SupportsRead[str | bytes] | None = None,
@@ -272,7 +282,7 @@ async def cli(
 class FileCommand(click.Command):  # client.py parse <file>
     """A Click Command class for file-based operations."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:  # type: ignore[explicit-any]  # click passthrough
         """Initialise FileCommand and configure input-file argument.
 
         :param args: Positional arguments for Click Command.
@@ -296,7 +306,7 @@ class FileCommand(click.Command):  # client.py parse <file>
 class DecodeCommand(click.Command):  # client.py decode [payload]
     """A Click Command class for payload decoding operations."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:  # type: ignore[explicit-any]  # click passthrough
         """Initialise DecodeCommand and configure optional payload argument.
 
         :param args: Positional arguments for Click Command.
@@ -315,7 +325,7 @@ class PortCommand(
 ):  # client.py <command> <port> --packet-log xxx --evofw3-flag xxx
     """A Click Command class for serial port operations."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:  # type: ignore[explicit-any]  # click passthrough
         """Initialise PortCommand and configure serial-port argument.
 
         :param args: Positional arguments for Click Command.
@@ -355,8 +365,10 @@ class PortCommand(
 # 1/5: PARSE (a file, +/- eavesdrop)
 @click.command(cls=FileCommand)  # parse a packet log file, then stop
 @click.pass_obj
-async def parse(
-    obj: Any, /, **kwargs: Any
+async def parse(  # type: ignore[explicit-any]  # heterogeneous click kwargs
+    obj: CliObjT,
+    /,
+    **kwargs: Any,
 ) -> tuple[Literal["parse"], dict[str, str], dict[str, str]]:
     """Command to parse a log file containing messages/packets.
 
@@ -394,8 +406,11 @@ async def parse(
     help="e.g. 'device_id, device_id, ...'",
 )
 @click.pass_obj
-async def monitor(
-    obj: Any, /, discover: None | bool = None, **kwargs: Any
+async def monitor(  # type: ignore[explicit-any]  # heterogeneous click kwargs
+    obj: CliObjT,
+    /,
+    discover: None | bool = None,
+    **kwargs: Any,
 ) -> tuple[Literal["monitor"], dict[str, str], dict[str, str]]:
     """Monitor (eavesdrop and/or probe) a serial port for messages.
 
@@ -442,11 +457,13 @@ async def monitor(
     help="controller_id, filename.json",
 )
 @click.pass_obj
-async def execute(
-    obj: Any, /, **kwargs: Any
+async def execute(  # type: ignore[explicit-any]  # heterogeneous click kwargs
+    obj: CliObjT,
+    /,
+    **kwargs: Any,
 ) -> tuple[
     Literal["execute"],
-    dict[str | None, str | dict[str, Any]],
+    dict[str | None, str | CliKwargsT],
     dict[str, str],
 ]:
     """Execute any specified scripts, return the results, then quit.
@@ -463,7 +480,7 @@ async def execute(
     lib_config[SZ_CONFIG][SZ_DISABLE_DISCOVERY] = True
     lib_config[SZ_CONFIG][SZ_DISABLE_QOS] = False
 
-    known_list: dict[str | None, dict[str, Any]] = {}
+    known_list: dict[str | None, CliKwargsT] = {}
     if kwargs[GET_FAULTS]:
         known_list = {kwargs[GET_FAULTS]: {}}
     elif kwargs[GET_SCHED][0]:
@@ -483,12 +500,14 @@ async def execute(
 # 4/5: LISTEN (to RF, +/- eavesdrop - NO sending/discovery)
 @click.command(cls=PortCommand)  # (optionally) execute a command, then listen
 @click.pass_obj
-async def listen(
-    obj: Any, /, **kwargs: Any
+async def listen(  # type: ignore[explicit-any]  # heterogeneous click kwargs
+    obj: CliObjT,
+    /,
+    **kwargs: Any,
 ) -> tuple[
     Literal["listen"],
     dict[str, str | dict[str, str | None] | None],
-    dict[str, Any],
+    CliKwargsT,
 ]:
     """Listen to (eavesdrop only) a serial port for messages/packets.
 
@@ -521,9 +540,12 @@ async def listen(
     help="export discovered devices to JSON file",
 )
 @click.pass_obj
-async def scan(
-    obj: Any, /, duration: int = 300, **kwargs: Any
-) -> tuple[Literal["scan"], dict[str, str], dict[str, Any]]:
+async def scan(  # type: ignore[explicit-any]  # heterogeneous click kwargs
+    obj: CliObjT,
+    /,
+    duration: int = 300,
+    **kwargs: Any,
+) -> tuple[Literal["scan"], dict[str, str], CliKwargsT]:
     """Passive device scan: listen to RF, classify unknown devices, export.
 
     No discovery, no eavesdrop, no sending — pure observation.
@@ -679,7 +701,10 @@ def _print_scan_results(scan: DiscoveryScan, output_path: str | None) -> None:
         print(f"\nExported to {output_path}")
 
 
-def print_results(gateway: Gateway, **kwargs: Any) -> None:
+def print_results(  # type: ignore[explicit-any]  # heterogeneous click kwargs
+    gateway: Gateway,
+    **kwargs: Any,
+) -> None:
     """Print the results of execution commands (faults, schedules).
 
     :param gateway: The gateway instance.
@@ -698,12 +723,12 @@ def print_results(gateway: Gateway, **kwargs: Any) -> None:
 
     if kwargs[GET_SCHED][0]:
         system_id, zone_index = kwargs[GET_SCHED]
-        if zone_index == "HW":
-            dhw = gateway.device_registry.system_by_id[system_id].dhw
-            zone: Any = dhw
-        else:
-            sys_entry = gateway.device_registry.system_by_id[system_id]
-            zone = sys_entry.zone_by_index[zone_index]
+        sys_entry = gateway.device_registry.system_by_id[system_id]
+        zone = (
+            sys_entry.dhw
+            if zone_index == "HW"
+            else sys_entry.zone_by_index[zone_index]
+        )
         assert zone
         schedule = zone.schedule
 
@@ -719,7 +744,7 @@ def print_results(gateway: Gateway, **kwargs: Any) -> None:
         system_id, _ = kwargs[GET_SCHED]
 
 
-def _write_state(schema: dict[str, Any], msgs: dict[str, str]) -> None:
+def _write_state(schema: Mapping[str, object], msgs: dict[str, str]) -> None:
     """Write the state to the file system (blocking)."""
     with open("state_msgs.log", "w") as f:
         for dtm, packet_data in msgs.items():
@@ -738,7 +763,10 @@ async def _save_state(gateway: Gateway) -> None:
     await asyncio.to_thread(_write_state, schema, msgs)
 
 
-async def _print_engine_state(gateway: Gateway, **kwargs: Any) -> None:
+async def _print_engine_state(  # type: ignore[explicit-any]  # heterogeneous click kwargs
+    gateway: Gateway,
+    **kwargs: Any,
+) -> None:
     """Print the current engine state (schema and packets).
 
     :param gateway: The gateway instance.
@@ -752,7 +780,10 @@ async def _print_engine_state(gateway: Gateway, **kwargs: Any) -> None:
         print(f"packets: {json.dumps(packets, indent=4)}\r\n")
 
 
-async def print_summary(gateway: Gateway, **kwargs: Any) -> None:
+async def print_summary(  # type: ignore[explicit-any]  # heterogeneous click kwargs
+    gateway: Gateway,
+    **kwargs: Any,
+) -> None:
     """Print a summary of the system state, schema, params, and status.
 
     :param gateway: The gateway instance.
@@ -812,30 +843,24 @@ async def print_summary(gateway: Gateway, **kwargs: Any) -> None:
             for d in gateway.device_registry.devices
             if d.type == DEV_TYPE_MAP.CTL
         ]:
-            for msg_code, verbs in (
-                await device.entity_state.get_state_cache_nested()
-            ).items():
-                if msg_code in (Code._0005, Code._000C):
-                    for verb in verbs.values():
-                        for packet in verb.values():
-                            print(f"{packet}")
+            for m in await device.entity_state.get_all_messages():
+                if m.code in (Code._0005, Code._000C):
+                    print(f"{m}")
             print()
         for device in [
             d
             for d in gateway.device_registry.devices
             if d.type == DEV_TYPE_MAP.UFC
         ]:
-            for cd in (
-                await device.entity_state.get_state_cache_nested()
-            ).values():
-                for verb in cd.values():
-                    for packet in verb.values():
-                        print(f"{packet}")
+            for m in await device.entity_state.get_all_messages():
+                print(f"{m}")
             print()
 
 
-async def async_main(
-    command: str, lib_kwargs: dict[str, Any], **kwargs: Any
+async def async_main(  # type: ignore[explicit-any]  # heterogeneous click kwargs
+    command: str,
+    lib_kwargs: CliKwargsT,
+    **kwargs: Any,
 ) -> None:
     """Execute the main asynchronous logic for the CLI.
 
@@ -881,9 +906,7 @@ async def async_main(
 
     if kwargs["restore_schema"]:
         print(" - restoring client schema from a HA cache...")
-        state: dict[str, Any] = json.load(kwargs["restore_schema"])["data"][
-            "client_state"
-        ]
+        state = json.load(kwargs["restore_schema"])["data"]["client_state"]
         lib_kwargs = lib_kwargs | state["schema"]
 
     # Explicitly extract input_file if present to ensure it's passed as a named arg
@@ -892,7 +915,7 @@ async def async_main(
     # Extract the configuration variables targeting the GatewayConfig Dataclass
     config_dict = lib_kwargs.pop(SZ_CONFIG, {})
 
-    gwy_config_kwargs: dict[str, Any] = {}
+    gwy_config_kwargs: CliKwargsT = {}
 
     # 1. Map inner SZ_CONFIG keys
     for key, config_val in config_dict.items():

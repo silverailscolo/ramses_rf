@@ -79,7 +79,7 @@ __all__ = [
 _LOGGER = logging.getLogger(__name__)
 
 
-def __getattr__(name: str) -> Any:
+def __getattr__(name: str) -> Any:  # type: ignore[explicit-any]  # lazy heterogeneous exports
     """Lazy-load heavy L7 domain objects and L3 primitives.
 
     :param name: The name of the attribute to retrieve.

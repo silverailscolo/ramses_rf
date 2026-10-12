@@ -13,6 +13,7 @@ from ramses_rf.const import (
     DevType,
 )
 from ramses_rf.models import DeviceTraits, TrvState
+from ramses_rf.typing import SchemaT
 from ramses_tx import Packet
 from ramses_tx.const import Code
 
@@ -33,7 +34,7 @@ class Setpoint(Temperature):  # 2309
         """Return the target setpoint temperature in degrees Celsius."""
         return self.temp_state.setpoint
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
@@ -48,7 +49,7 @@ class Thermostat(BatteryState, Setpoint, Fakeable):  # THM (..):
     _SLUG = DevType.THM
     _STATE_ATTR = "temperature"
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         """Initialize the thermostat device."""
@@ -71,7 +72,7 @@ class TrvActuator(BatteryState, HeatDemand, Setpoint):  # TRV (04):
     _SLUG = DevType.TRV
     _STATE_ATTR = SZ_HEAT_DEMAND
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         """Initialize the TRV actuator device."""
@@ -100,7 +101,7 @@ class TrvActuator(BatteryState, HeatDemand, Setpoint):  # TRV (04):
         """Return whether open-window detection is currently active."""
         return self.trv_state.window_open
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the current operating status dictionary."""
         base_status = await super().status()
         return {

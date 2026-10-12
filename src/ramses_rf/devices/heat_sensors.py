@@ -11,6 +11,7 @@ from ramses_rf.const import HEARTBEAT_TIMEOUT_DHW, SZ_TEMPERATURE, DevType
 from ramses_rf.enums import Action, ZoneRole
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits
+from ramses_rf.typing import SchemaT
 from ramses_tx import Packet
 from ramses_tx.const import FA, RQ, Code
 from ramses_tx.typing import PayDictT
@@ -39,7 +40,7 @@ class Weather(DeviceHeat):  # 0002
             self, Action.PUT_OUTDOOR_TEMP, {"temperature": value}
         )
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
@@ -66,7 +67,7 @@ class DhwTemperature(DeviceHeat):  # 1260
             self, Action.PUT_DHW_TEMP, {"temperature": value}
         )
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
@@ -113,7 +114,7 @@ class Temperature(DeviceHeat):  # 30C9
             },
         )
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
@@ -144,7 +145,7 @@ class DhwSensor(
         """
         return HEARTBEAT_TIMEOUT_DHW
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         """Initialize the DHW sensor device."""
@@ -164,7 +165,7 @@ class DhwSensor(
             Code._10A0, verb=RQ
         ) or await self.entity_state.get_value(Code._10A0)
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return the device parameter dictionary."""
         base_params = await super().params()
         return {
@@ -182,7 +183,7 @@ class OutSensor(Weather, Fakeable):  # OUT: 17
     _SLUG = DevType.OUT
     _STATE_ATTR = SZ_TEMPERATURE
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         """Initialize the outdoor sensor device."""

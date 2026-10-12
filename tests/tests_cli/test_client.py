@@ -110,11 +110,12 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
 
     # Mock message database interaction via the entity_state component
     mock_dev.entity_state = MagicMock()
-    mock_dev.entity_state.get_state_cache_nested = AsyncMock(
-        return_value={
-            Code._0005: {"verb": {"packet": "msg_0005"}},
-            Code._000C: {"verb": {"packet": "msg_000C"}},
-        }
+    msg_0005, msg_000c = MagicMock(), MagicMock()
+    msg_0005.code, msg_000c.code = Code._0005, Code._000C
+    msg_0005.configure_mock(**{"__str__.return_value": "msg_0005"})
+    msg_000c.configure_mock(**{"__str__.return_value": "msg_000c"})
+    mock_dev.entity_state.get_all_messages = AsyncMock(
+        return_value=[msg_0005, msg_000c]
     )
 
     gateway.device_registry.devices = [mock_dev]

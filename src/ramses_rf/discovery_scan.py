@@ -31,6 +31,7 @@ from ramses_rf.protocol.ramses import (
     VMI_REQUEST_CODES,
     VMI_WRITE_CODES,
 )
+from ramses_rf.typing import SchemaT
 from ramses_tx.const import SZ_ACTIVE_HGI
 
 if TYPE_CHECKING:
@@ -335,12 +336,12 @@ class DiscoveredDevice:
     # strategy.classify(packet) and this tracking moves with it.
     contradiction_count: int = 0
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> SchemaT:
         """Serialize to a plain dict (for JSON export)."""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> DiscoveredDevice:
+    def from_dict(cls, data: SchemaT) -> DiscoveredDevice:
         """Deserialize from a plain dict (for JSON import/resume)."""
         return cls(
             **{k: data[k] for k in data if k in cls.__dataclass_fields__}
@@ -1620,7 +1621,9 @@ def _recompute_confidence(device: DiscoveredDevice) -> str:
     return "low"
 
 
-def _extract_zone_index_from_payload(payload: Any | str) -> str | None:
+def _extract_zone_index_from_payload(  # type: ignore[explicit-any]  # duck-typed payload
+    payload: Any | str,
+) -> str | None:
     """Extract and validate the zone_index from a packet payload.
 
     Zone index is typically the first 2 hex chars of a raw payload string or
@@ -1729,7 +1732,9 @@ def _is_appliance_control_signal(
     return verb.strip() == "I"
 
 
-def _extract_domain_id_from_000c(payload: Any | str) -> str | None:
+def _extract_domain_id_from_000c(  # type: ignore[explicit-any]  # duck-typed payload
+    payload: Any | str,
+) -> str | None:
     """Extract the domain_id (FC/FA/F9) from a 000C binding payload.
 
     000C payloads encode the domain in the zone_type field (payload[2:4])

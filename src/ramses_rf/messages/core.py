@@ -7,6 +7,7 @@ from typing import Any
 from ramses_rf.address import Address
 from ramses_rf.enums import Topic
 from ramses_rf.routing import StateHeader
+from ramses_rf.typing import SchemaT
 from ramses_tx.dtos import PacketDTO
 from ramses_tx.typing import DeviceIdT
 
@@ -24,7 +25,7 @@ class Message:
     :param dst: The logical target of the message.
     :type dst: Address
     :param data: The decoded payload properties.
-    :type data: dict[str, Any]
+    :type data: SchemaT
     :param packets: The L3 packets that comprise this message.
     :type packets: tuple[PacketDTO, ...]
     :param timestamp: The time the message was recorded.
@@ -37,7 +38,7 @@ class Message:
     header: StateHeader
     src: Address
     dst: Address
-    data: dict[str, Any]
+    data: SchemaT
     packets: tuple[PacketDTO, ...]
     timestamp: dt
     lineage: tuple["Message", ...] = field(default_factory=tuple)
@@ -55,7 +56,9 @@ class Message:
         addr_str = self.packets[0].addr3
         return Address(DeviceIdT(addr_str if addr_str else "--:------"))
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(  # type: ignore[explicit-any]  # dict-compat shim
+        self, key: str, default: Any = None
+    ) -> Any:
         """Safely extract payload properties without KeyError.
 
         :param key: The dictionary key to retrieve.
@@ -67,7 +70,9 @@ class Message:
         """
         return self.data.get(key, default)
 
-    def enrich(self, new_topic: Topic, **kwargs: Any) -> "Message":
+    def enrich(  # type: ignore[explicit-any]  # heterogeneous event kwargs
+        self, new_topic: Topic, **kwargs: Any
+    ) -> "Message":
         """Spawn an enriched Message, preserving history.
 
         :param new_topic: The evolved routing discriminator.

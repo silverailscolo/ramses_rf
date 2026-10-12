@@ -8,8 +8,9 @@ import contextlib
 import logging
 from datetime import UTC, datetime as dt, timedelta as td
 from logging.handlers import QueueListener
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
+from ramses_rf.typing import SchemaT
 from ramses_tx import Packet, protocol_factory, set_packet_logging_config
 from ramses_tx.const import SZ_ACTIVE_HGI
 from ramses_tx.logger import flush_packet_log
@@ -36,6 +37,7 @@ if TYPE_CHECKING:
     from ramses_tx.dtos import PacketDTO
 
     from .config import GatewayConfig
+    from .gateway import Gateway
     from .interfaces import DeviceRegistryInterface, MessageStoreInterface
     from .systems.tcs import Evohome
 
@@ -60,11 +62,11 @@ class GatewayLifecycle:
         _engine: Engine
         _message_store: MessageStoreInterface | None
         _packet_log_listener: QueueListener | None
-        _schema: dict[str, Any]
+        _schema: SchemaT
         _tcs: Evohome | None
         state_projector: StateProjector | None
 
-        def add_task(self, task: asyncio.Task[Any]) -> None:
+        def add_task(self, task: asyncio.Task[object]) -> None:
             """Register a tracked task for clean cancellation."""
             ...
 
@@ -72,7 +74,7 @@ class GatewayLifecycle:
             """Clear cached message envelopes and packets."""
             ...
 
-        async def schema(self) -> dict[str, Any]:
+        async def schema(self) -> SchemaT:
             """Return the current system topology schema."""
             ...
 
@@ -87,7 +89,7 @@ class GatewayLifecycle:
         /,
         *,
         start_discovery: bool = True,
-        cached_packets: dict[str, dict[str, Any] | str] | None = None,
+        cached_packets: dict[str, SchemaT | str] | None = None,
     ) -> None:
         """Start the Gateway."""
         _, self._packet_log_listener = await set_packet_logging_config(
@@ -98,7 +100,7 @@ class GatewayLifecycle:
         if self._packet_log_listener:
             self._packet_log_listener.start()
 
-            packet_log_config: dict[str, Any] = dict(self._engine.packet_log)
+            packet_log_config: SchemaT = dict(self._engine.packet_log)
             if flush_interval := packet_log_config.get("flush_interval", 0):
 
                 async def _periodic_flush() -> None:
@@ -124,7 +126,9 @@ class GatewayLifecycle:
         # The background worker is not started; the projector is fed
         # synchronously via the gateway._msg_handler bridge.
         if self.state_projector is None:
-            self.state_projector = StateProjector(self, asyncio.Queue())
+            self.state_projector = StateProjector(
+                cast("Gateway", self), asyncio.Queue()
+            )
 
         self.config.disable_discovery, disable_discovery = (
             True,
@@ -132,7 +136,7 @@ class GatewayLifecycle:
         )
 
         load_schema(
-            self,
+            cast("Gateway", self),
             known_list=self.config.known_list,
             **self._schema,
         )
@@ -217,7 +221,7 @@ class GatewayLifecycle:
         if self._message_store:
             self._message_store.stop()
 
-    async def _pause(self, *args: Any) -> None:
+    async def _pause(self, *args: object) -> None:
         """Pause the (unpaused) gateway (disables sending/discovery)."""
         _LOGGER.debug("Gateway: Pausing engine...")
 
@@ -232,9 +236,9 @@ class GatewayLifecycle:
             self.config.disable_discovery = disc_flag
             raise
 
-    async def _resume(self) -> tuple[Any, ...]:
+    async def _resume(self) -> tuple[object, ...]:
         """Resume the (paused) gateway."""
-        args: tuple[Any, ...]
+        args: tuple[object, ...]
         _LOGGER.debug("Gateway: Resuming engine...")
 
         self.config.disable_discovery, *args = (
@@ -245,7 +249,7 @@ class GatewayLifecycle:
 
     async def get_state(
         self, include_expired: bool = False
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
+    ) -> tuple[SchemaT, SchemaT]:
         """Return the current global schema and state.
 
         Forces a complete state projection sync across all pending packets
@@ -254,7 +258,7 @@ class GatewayLifecycle:
         :param include_expired: If True, include expired messages in the state.
         :type include_expired: bool
         :returns: A tuple of (schema dictionary, sorted packet dictionary).
-        :rtype: tuple[dict[str, Any], dict[str, Any]]
+        :rtype: tuple[SchemaT, SchemaT]
         """
         # Drain all pending asynchronous packet ingestion tasks before taking state snapshot
         await self._pause()
@@ -268,7 +272,7 @@ class GatewayLifecycle:
                 return False
             return include_expired or not getattr(msg, "_expired", False)
 
-        packets_dict: dict[str, Any] = {}
+        packets_dict: SchemaT = {}
         if self._message_store:
             all_msgs = await self._message_store.all(include_expired=True)
             for i, msg in enumerate(all_msgs):
@@ -283,7 +287,7 @@ class GatewayLifecycle:
 
     async def _restore_cached_packets(
         self,
-        packets: dict[str, dict[str, Any] | str],
+        packets: dict[str, SchemaT | str],
         _clear_state: bool = False,
     ) -> None:
         """Restore cached packets (may include expired packets)."""

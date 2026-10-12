@@ -245,6 +245,7 @@ zigbee = ["zigpy>=2.0.0"]           # ZigbeeTransport (Phase 3) — provided by 
     "explicit-any",  #  mocks/fixtures legitimately carry Any
     "arg-type",  #     54
     "type-arg",  #     11
+    "attr-defined",  #  duck-typed state/event attributes in fixtures
   ]
 
 [[tool.mypy.overrides]]
@@ -271,16 +272,8 @@ zigbee = ["zigpy>=2.0.0"]           # ZigbeeTransport (Phase 3) — provided by 
 
   disable_error_code = [
     "explicit-any",  #  mocks/fixtures legitimately carry Any
+    "arg-type",      #  plain strs for NewType'd ids in test calls
   ]
-
-[[tool.mypy.overrides]]
-  module = [
-    "ramses_cli.*",
-    "ramses_rf.*",
-  ]
-
-  disallow_any_explicit = false
-
 
 #
 ## ruff ##############################################################################

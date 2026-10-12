@@ -163,7 +163,7 @@ async def test_execution_of_exec_cmd(mock_gateway: MagicMock) -> None:
 @pytest.mark.asyncio
 async def test_execution_of_get_faults(mock_gateway: MagicMock) -> None:
     """Test execution of get_faults logic."""
-    await get_faults(mock_gateway, DEV_ID)  # type: ignore[arg-type]
+    await get_faults(mock_gateway, DEV_ID)
     mock_dev = mock_gateway.device_registry.get_device(DEV_ID)
     mock_dev.tcs.get_faultlog.assert_awaited_once()
 
@@ -171,7 +171,7 @@ async def test_execution_of_get_faults(mock_gateway: MagicMock) -> None:
 @pytest.mark.asyncio
 async def test_execution_of_get_schedule(mock_gateway: MagicMock) -> None:
     """Test execution of get_schedule logic."""
-    await get_schedule(mock_gateway, DEV_ID, "01")  # type: ignore[arg-type]
+    await get_schedule(mock_gateway, DEV_ID, "01")
     mock_dev = mock_gateway.device_registry.get_device(DEV_ID)
     mock_zone = mock_dev.tcs.get_htg_zone("01")
     mock_zone.get_schedule.assert_awaited_once()
@@ -184,7 +184,7 @@ async def test_execution_of_set_schedule(
     """Test execution of set_schedule logic."""
     sched_file = tmp_path / "sched.json"
     sched_file.write_text(f'{{"{SZ_ZONE_INDEX}": "01", "{SZ_SCHEDULE}": []}}')
-    await set_schedule(mock_gateway, DEV_ID, str(sched_file))  # type: ignore[arg-type]
+    await set_schedule(mock_gateway, DEV_ID, str(sched_file))
     mock_dev = mock_gateway.device_registry.get_device(DEV_ID)
     mock_zone = mock_dev.tcs.get_htg_zone("01")
     mock_zone.set_schedule.assert_awaited_once()
@@ -276,7 +276,7 @@ async def test_script_binding(mock_gateway: MagicMock) -> None:
     )
 
     with patch("ramses_cli.discovery.Fakeable", MockFakeable):
-        await script_bind_device(mock_gateway, DEV_ID, Code._2309)  # type: ignore[arg-type]
+        await script_bind_device(mock_gateway, DEV_ID, Code._2309)
         mock_dev = mock_gateway.device_registry.get_device(DEV_ID)
         mock_dev.wait_for_binding_request.assert_awaited()
 
@@ -293,14 +293,14 @@ async def test_script_binding_fail(mock_gateway: MagicMock) -> None:
         patch("ramses_cli.discovery.Fakeable", RealFakeable),
         pytest.raises((AssertionError, TypeError)),
     ):
-        await script_bind_device(mock_gateway, DEV_ID, Code._2309)  # type: ignore[arg-type]
+        await script_bind_device(mock_gateway, DEV_ID, Code._2309)
 
 
 @pytest.mark.asyncio
 async def test_script_poll_device(mock_gateway: MagicMock) -> None:
     """Test script_poll_device task creation."""
     # Must be async test to provide loop for create_task
-    tasks = script_poll_device(mock_gateway, DEV_ID)  # type: ignore[arg-type]
+    tasks = script_poll_device(mock_gateway, DEV_ID)
 
     assert len(tasks) == 2  # One for each code (0016, 1FC9)
     assert len(mock_gateway._engine._tasks) == 2

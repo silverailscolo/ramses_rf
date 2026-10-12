@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 import re
 import struct
-from typing import Any
+from typing import TypedDict
 
 from ramses_rf.payloads import PAYLOAD_REGISTRY, PayloadBase
 from ramses_rf.payloads.adapters import payload_to_dict
@@ -26,6 +26,20 @@ __all__ = [
     "parse_hex_value",
 ]
 
+
+class DissectionT(TypedDict, total=False):
+    """Structured result of dissect_payload()."""
+
+    payload_hex: str
+    byte_length: int
+    opcode: Code | str | None
+    verb: Verb | str | None
+    skip_bytes: int
+    blocks: dict[str, dict[str, dict[str, object]]]
+    schema_decoded: object
+    schema_decode_error: str
+
+
 _PACKET_REGEX = re.compile(
     r"(?P<verb>I|RP|RQ|W)\s+"
     r"(?:[0-9]{3}|---|\.\.\.)\s+"
@@ -38,16 +52,16 @@ _PACKET_REGEX = re.compile(
 )
 
 
-def parse_hex_value(hex_str: str) -> dict[str, Any]:
+def parse_hex_value(hex_str: str) -> dict[str, object]:
     """Parse a hex string slice into multiple numeric representations.
 
     :param hex_str: Hexadecimal string slice to parse.
     :type hex_str: str
     :returns: Dictionary with decoded representations across endianness.
-    :rtype: dict[str, Any]
+    :rtype: dict[str, object]
     """
     clean_hex = hex_str.strip().upper()
-    result: dict[str, Any] = {
+    result: dict[str, object] = {
         "raw": clean_hex,
         "hex": f"0x{clean_hex}",
     }
@@ -113,7 +127,7 @@ def dissect_payload_blocks(
     payload_hex: str,
     block_size_bytes: int,
     skip_bytes: int = 0,
-) -> dict[str, dict[str, Any]]:
+) -> dict[str, dict[str, object]]:
     """Slice a hex payload into fixed-size byte blocks and decode them.
 
     :param payload_hex: Sanitised hexadecimal string.
@@ -123,14 +137,14 @@ def dissect_payload_blocks(
     :param skip_bytes: Number of leading bytes to skip before slicing.
     :type skip_bytes: int
     :returns: Mapping of block names to parsed block dictionaries.
-    :rtype: dict[str, dict[str, Any]]
+    :rtype: dict[str, dict[str, object]]
     """
     clean_hex = re.sub(r"[^0-9A-Fa-f]", "", payload_hex)
     skip_chars = skip_bytes * 2
     data_section = clean_hex[skip_chars:]
     block_chars = block_size_bytes * 2
 
-    blocks: dict[str, dict[str, Any]] = {}
+    blocks: dict[str, dict[str, object]] = {}
     total_blocks = len(data_section) // block_chars
 
     for block_index in range(total_blocks):
@@ -226,7 +240,7 @@ def dissect_payload(
     skip_bytes: int = 0,
     opcode: Code | str | None = None,
     verb: Verb | str | None = None,
-) -> dict[str, Any]:
+) -> DissectionT:
     """Dissect a hex payload with multi-block representation and schema lookup.
 
     :param payload_hex: The hexadecimal payload string.
@@ -240,25 +254,26 @@ def dissect_payload(
     :param verb: Optional message verb (e.g. RP, I, RQ, W) or Verb enum.
     :type verb: Verb | str | None
     :returns: Comprehensive payload dissection dictionary.
-    :rtype: dict[str, Any]
+    :rtype: DissectionT
     """
     clean_hex = re.sub(r"[^0-9A-Fa-f]", "", payload_hex)
     byte_length = len(clean_hex) // 2
 
-    result: dict[str, Any] = {
+    blocks: dict[str, dict[str, dict[str, object]]] = {}
+    for size in block_sizes:
+        if size <= byte_length:
+            blocks[f"block_{size}byte"] = dissect_payload_blocks(
+                clean_hex, block_size_bytes=size, skip_bytes=skip_bytes
+            )
+
+    result: DissectionT = {
         "payload_hex": clean_hex,
         "byte_length": byte_length,
         "opcode": opcode,
         "verb": verb,
         "skip_bytes": skip_bytes,
-        "blocks": {},
+        "blocks": blocks,
     }
-
-    for size in block_sizes:
-        if size <= byte_length:
-            result["blocks"][f"block_{size}byte"] = dissect_payload_blocks(
-                clean_hex, block_size_bytes=size, skip_bytes=skip_bytes
-            )
 
     # Attempt registered schema decoding if opcode is known
     if opcode and len(clean_hex) >= 2:
@@ -286,7 +301,7 @@ def dissect_payload(
     return result
 
 
-def _format_field(value: Any, width: int, align: str = "left") -> str:
+def _format_field(value: object, width: int, align: str = "left") -> str:
     """Format an item to a fixed column width.
 
     :param value: Value to format.
@@ -308,13 +323,13 @@ def _format_field(value: Any, width: int, align: str = "left") -> str:
 
 
 def format_dissection_table(
-    blocks: dict[str, dict[str, Any]],
+    blocks: dict[str, dict[str, object]],
     title: str,
 ) -> str:
     """Format block slices into an aligned terminal table.
 
     :param blocks: Dictionary mapping word block names to parsed details.
-    :type blocks: dict[str, dict[str, Any]]
+    :type blocks: dict[str, dict[str, object]]
     :param title: Title header for the table.
     :type title: str
     :returns: Multi-line string containing the formatted ASCII table.
@@ -352,20 +367,21 @@ def format_dissection_table(
     return "\n".join(lines) + "\n"
 
 
-def format_dissection_output(dissection: dict[str, Any]) -> str:
+def format_dissection_output(dissection: DissectionT) -> str:
     """Format complete payload dissection into formatted human-readable output.
 
     :param dissection: Dictionary returned by dissect_payload.
-    :type dissection: dict[str, Any]
+    :type dissection: DissectionT
     :returns: Multi-line formatted terminal report.
     :rtype: str
     """
+    payload_hex = dissection.get("payload_hex", "")
     output: list[str] = [
         "=" * 70,
         "RAMSES RF Payload Dissection Report",
         "=" * 70,
-        f"Payload Hex : {dissection['payload_hex']}",
-        f"Byte Length : {dissection['byte_length']} bytes ({len(dissection['payload_hex'])} hex characters)",
+        f"Payload Hex : {payload_hex}",
+        f"Byte Length : {dissection.get('byte_length', '?')} bytes ({len(payload_hex)} hex characters)",
     ]
 
     if dissection.get("opcode"):
@@ -394,8 +410,7 @@ def format_dissection_output(dissection: dict[str, Any]) -> str:
             f"Schema Decode Error: {dissection['schema_decode_error']}"
         )
 
-    blocks = dissection.get("blocks", {})
-    for block_name, block_dict in blocks.items():
+    for block_name, block_dict in dissection.get("blocks", {}).items():
         size_label = block_name.replace("block_", "").replace("byte", "-Byte")
         output.append(
             format_dissection_table(

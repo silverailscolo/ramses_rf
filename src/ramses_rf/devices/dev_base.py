@@ -52,7 +52,7 @@ if TYPE_CHECKING:
     from ramses_rf.devices.hvac_ventilators import HvacVentilator
     from ramses_rf.models import DeviceTraits
     from ramses_rf.systems import Zone
-    from ramses_rf.typing import PollingIntervalsT
+    from ramses_rf.typing import PollingIntervalsT, SchemaT
     from ramses_tx import CommandDTO
     from ramses_tx.const import IndexT
     from ramses_tx.typing import DeviceIdT
@@ -78,7 +78,7 @@ class DeviceBase(Entity):
 
     _binding_manager: BindingManager | None = None
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self,
         gateway: Gateway,
         device_address: Address,
@@ -321,7 +321,7 @@ class DeviceBase(Entity):
         return self._strategy
 
     @property
-    def info(self) -> dict[str, Any] | None:
+    def info(self) -> SchemaT | None:
         """Return the latest 10E0 payload sent by this device, if seen.
 
         Read synchronously from the in-memory entity state, so it can
@@ -333,7 +333,7 @@ class DeviceBase(Entity):
             ``manufacturer_sub_id``, ``product_id``, ``date_1``,
             ``date_2``), or ``None`` if no 10E0 message has been
             received.
-        :rtype: dict[str, Any] | None
+        :rtype: SchemaT | None
         """
         info = self.entity_state.get_cached_value(Code._10E0, src_id=self.id)
         return info if isinstance(info, dict) else None
@@ -593,35 +593,35 @@ class DeviceBase(Entity):
             if not getattr(m, "_expired", False)
         )  # TODO: needs addressing
 
-    async def schema(self) -> dict[str, Any]:
+    async def schema(self) -> SchemaT:
         """Return the fixed attributes of the device.
 
         :return: A dictionary containing the device schema.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         return {}  # SZ_CLASS: DEV_TYPE_MAP[self._SLUG]}
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return the configurable attributes of the device.
 
         :return: A dictionary containing device parameters.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         return {}
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the state attributes of the device.
 
         :return: A dictionary of status properties.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         return {}
 
-    async def traits(self) -> dict[str, Any]:
+    async def traits(self) -> SchemaT:
         """Get the traits of the device.
 
         :return: A dictionary detailing the device's traits.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         result = await self.entity_state.traits()
 
@@ -659,11 +659,11 @@ class BatteryState(DeviceBase):  # 1060
             return False
         return self.power_state.battery_low
 
-    async def battery_state(self) -> dict[str, Any] | None:  # 1060
+    async def battery_state(self) -> SchemaT | None:  # 1060
         """Return a mapping of the current battery state.
 
         :return: A dictionary containing battery low and level metrics.
-        :rtype: dict[str, Any] | None
+        :rtype: SchemaT | None
         """
         if self.is_faked:
             return None
@@ -674,11 +674,11 @@ class BatteryState(DeviceBase):  # 1060
             SZ_BATTERY_LEVEL: self.power_state.battery_level,
         }
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the state attributes of the device including battery.
 
         :return: A dictionary of status properties.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         base_status = await super().status()
         if (bat_state := await self.battery_state()) is not None:
@@ -692,20 +692,20 @@ class BatteryState(DeviceBase):  # 1060
 class DeviceInfo(DeviceBase):  # 10E0
     """The base state class for device information (10E0) payloads."""
 
-    async def device_info(self) -> dict[str, Any] | None:  # 10E0
+    async def device_info(self) -> SchemaT | None:  # 10E0
         """Return the device specification and manufacturing data.
 
         :return: A dictionary of device information.
-        :rtype: dict[str, Any] | None
+        :rtype: SchemaT | None
         """
         result = await self.entity_state.get_value(Code._10E0, src_id=self.id)
         return result if isinstance(result, dict) else None
 
-    async def traits(self) -> dict[str, Any]:
+    async def traits(self) -> SchemaT:
         """Return the traits of the device.
 
         :return: A dictionary detailing the device's traits.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         result = await super().traits()
         msgs = await self.entity_state.get_message_log_flat()
@@ -733,7 +733,7 @@ class Fakeable(DeviceBase):
     devices will simply pick up such packets via RF.
     """
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self,
         gateway: Gateway,
         *args: Any,
@@ -938,7 +938,7 @@ class Fakeable(DeviceBase):
 class Device(Child, DeviceBase):
     """The base class for all devices."""
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self,
         gateway: Gateway,
         device_address: Address,
@@ -970,7 +970,7 @@ class HgiGateway(Device):  # HGI (18:)
 
     _SLUG: str = DevType.HGI
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         """Initialise the hardware gateway interface device.
@@ -1049,7 +1049,7 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
 
     _SLUG: str = DevType.HEA  # shouldn't be any of these instantiated
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self,
         gateway: Gateway,
         device_address: Address,
@@ -1078,7 +1078,7 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
         self.demand_state = DemandState()
         self.act_state: ActuatorState | None = None
 
-    def _make_tcs_controller(
+    def _make_tcs_controller(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self, *, msg: Message | None = None, **schema: Any
     ) -> None:  # CH/DHW
         """Attach a TCS (create/update as required) after passing it any msg."""
@@ -1123,7 +1123,7 @@ class DeviceHvac(Device):  # HVAC domain: ventilation, PIV, MV/HR
         DevType.HVC
     )  # these may be instantiated, and promoted later on
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self,
         gateway: Gateway,
         device_address: Address,

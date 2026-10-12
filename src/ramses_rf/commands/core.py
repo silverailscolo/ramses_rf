@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 from ramses_rf.address import Address
 from ramses_rf.enums import Action
+from ramses_rf.typing import SchemaT
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,7 +20,7 @@ class Command:
     :param action: The semantic domain intent.
     :type action: Action
     :param data: The parameters for the command action.
-    :type data: dict[str, Any]
+    :type data: SchemaT
     :param needs_reply: True if the L7 FSM should wait for an RP.
     :type needs_reply: bool
     :param timeout: Seconds the L7 FSM should wait for a reply.
@@ -33,7 +34,7 @@ class Command:
     src: Address
     dst: Address
     action: Action
-    data: dict[str, Any]
+    data: SchemaT
 
     # QoS & Conversational Tracking
     needs_reply: bool = False
@@ -43,7 +44,9 @@ class Command:
     generated_by: str = "unknown"
     correlation_id: UUID = field(default_factory=uuid4)
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(  # type: ignore[explicit-any]  # dict-compat shim
+        self, key: str, default: Any = None
+    ) -> Any:
         """Safely extract command properties without KeyError.
 
         :param key: The dictionary key to retrieve.
@@ -55,7 +58,9 @@ class Command:
         """
         return self.data.get(key, default)
 
-    def with_data(self, **kwargs: Any) -> "Command":
+    def with_data(  # type: ignore[explicit-any]  # heterogeneous intent kwargs
+        self, **kwargs: Any
+    ) -> "Command":
         """Spawn a new Command with updated data parameters.
 
         :param kwargs: The data properties to update or add.

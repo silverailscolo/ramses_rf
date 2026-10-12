@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any
 
 from ramses_rf.const import DevType
 from ramses_rf.enums import TopologyAction
@@ -16,6 +15,7 @@ from ramses_rf.protocol.ramses import (
     HVAC_KLASS_BY_VC_PAIR,
     VMI_REQUEST_CODES,
 )
+from ramses_rf.typing import SchemaT
 from ramses_tx.const import Code, Verb
 
 _LOGGER = logging.getLogger(__name__)
@@ -88,8 +88,7 @@ class HvacTopologyHandler(TopologyHandler):
         self,
         emit_event_cb: Callable[[TopologyChangedEvent], None],
         enable_eavesdrop: bool = False,
-        device_class_lookup_cb: Callable[[str], dict[str, Any] | None]
-        | None = None,
+        device_class_lookup_cb: Callable[[str], SchemaT | None] | None = None,
     ) -> None:
         """Initialize the handler with per-device evidence tracking.
 

@@ -202,7 +202,7 @@ class PollingManager:
         # Keys are (device_id, code) for device-level tasks, or
         # (device_id, code, zone_index) for zone-level tasks (e.g., 0004).
         self._tasks: dict[tuple[str, ...], PollingTask] = {}
-        self._poller_task: asyncio.Task[None] | None = None
+        self._poller_task: asyncio.Task[object] | None = None
         self._running: bool = False
 
     @property
@@ -521,21 +521,21 @@ class PollingManager:
                 ):
                     continue
                 task.last_missed_at = task.last_polled
-                device = self._gateway.device_registry.device_by_id.get(
+                dev = self._gateway.device_registry.device_by_id.get(
                     task.device_id
                 )
-                last_seen = getattr(device, "_last_msg_dtm", None)
+                last_seen = getattr(dev, "_last_msg_dtm", None)
                 if not isinstance(last_seen, dt) or (
                     last_seen <= task.last_polled
                 ):
                     task.failures += 1
-                    if device is not None and hasattr(device, "_missed_polls"):
-                        device._missed_polls += 1
+                    if dev is not None and hasattr(dev, "_missed_polls"):
+                        dev._missed_polls += 1
                         _LOGGER.debug(
                             "Poll %s to %s unanswered (missed=%s)",
                             task.code,
                             task.device_id,
-                            device._missed_polls,
+                            dev._missed_polls,
                         )
 
         processed_count = 0

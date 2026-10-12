@@ -15,6 +15,7 @@ from ramses_rf.const import (
 from ramses_rf.enums import Action
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits, HvacState
+from ramses_rf.typing import SchemaT
 from ramses_tx import Packet
 
 from .dev_base import BatteryState, DeviceHvac, Fakeable
@@ -28,7 +29,7 @@ class HvacRemoteBase(DeviceHvac):
     It provides common functionality and interfaces for remote control operations.
     """
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         """Initialize the HvacRemoteBase class.
@@ -121,7 +122,7 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
         """
         return self.hvac_state.boost_timer_mins
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return current operating status and state of remote."""
         base_status = await super().status()
         return {

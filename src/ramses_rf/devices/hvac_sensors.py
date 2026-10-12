@@ -21,6 +21,7 @@ from ramses_rf.enums import Action
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits, HvacState
 from ramses_rf.strategies import VentilationControlStrategy, best_hvac_strategy
+from ramses_rf.typing import SchemaT
 from ramses_tx import Packet, Priority
 from ramses_tx.const import Code
 from ramses_tx.typing import DeviceIdT
@@ -29,7 +30,7 @@ from .dev_base import BatteryState, DeviceHvac, Fakeable
 
 
 async def _send_hvac_sensor_intent(
-    device: HvacSensorBase, action: Action, data: dict[str, Any]
+    device: HvacSensorBase, action: Action, data: SchemaT
 ) -> Message | None:
     """Fake the sensor reading by sending an intent."""
     if not device.is_faked:
@@ -53,7 +54,7 @@ class HvacSensorBase(DeviceHvac):
     It provides common functionality for sensor data collection and processing.
     """
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         """Initialize the HvacSensorBase class.
@@ -100,11 +101,11 @@ class CarbonDioxide(HvacSensorBase):  # 1298
             self, Action.PUT_CO2_LEVEL, {"co2_level": value}
         )
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the status of the CO2 sensor.
 
         :return: A dictionary containing the sensor's status including CO2 level
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         base_status = await super().status()
         return {
@@ -137,11 +138,11 @@ class IndoorHumidity(HvacSensorBase):  # 12A0
             self, Action.PUT_INDOOR_HUMIDITY, {"indoor_humidity": value}
         )
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the status of the indoor humidity sensor.
 
         :return: A dictionary containing the sensor's status including humidity level
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         base_status = await super().status()
         return {
@@ -189,11 +190,11 @@ class PresenceDetect(HvacSensorBase):  # 2E10
             intent, priority=Priority.HIGH
         )
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the status of the presence sensor.
 
         :return: A dictionary containing the sensor's status including presence detection state
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         base_status = await super().status()
         return {
@@ -228,11 +229,11 @@ class HvacHumiditySensor(
         """
         return self.hvac_state.dewpoint_temp
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the status of the humidity sensor.
 
         :return: A dictionary containing the sensor's status including temperature and humidity
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         base_status = await super().status()
         return {

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, cast
 
 from ramses_rf.const import (
     SZ_ACCEPT,
@@ -17,9 +17,16 @@ from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
 from ramses_rf.pipeline.topology_handlers.base import TopologyHandler
 from ramses_rf.protocol.ramses import CODES_ONLY_FROM_CTL
+from ramses_rf.typing import SchemaT
 from ramses_tx import ALL_DEV_ADDR, DeviceIdT
 from ramses_tx.address import hex_id_to_dev_id
 from ramses_tx.const import I_, RQ, W_, Code
+
+if TYPE_CHECKING:
+    from ramses_rf.payloads.heating import (
+        ZoneDevices5BPayload,
+        ZoneDevices6BPayload,
+    )
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -183,18 +190,18 @@ class BindTopologyHandler(TopologyHandler):
                 devices: list[str] = []
 
                 if hasattr(payload, "device_id_str"):
+                    zi = getattr(payload, "zone_index", None)
                     zone_index = (
-                        f"{payload.zone_index:02X}"
-                        if isinstance(payload.zone_index, int)
-                        else (
-                            str(payload.zone_index)
-                            if payload.zone_index is not None
-                            else None
-                        )
+                        f"{zi:02X}"
+                        if isinstance(zi, int)
+                        else (str(zi) if zi is not None else None)
                     )
-                    domain_id = payload.domain_id
-                    device_role = f"{payload.device_role_id:02X}"
-                    devices = [payload.device_id_str]
+                    domain_id = getattr(payload, "domain_id", None)
+                    zone_devices = cast(
+                        "ZoneDevices5BPayload | ZoneDevices6BPayload", payload
+                    )
+                    device_role = f"{zone_devices.device_role_id:02X}"
+                    devices = [zone_devices.device_id_str]
                 elif isinstance(payload, dict):
                     val_zone = payload.get("zone_index") or payload.get(
                         "zone_index"
@@ -227,7 +234,7 @@ class BindTopologyHandler(TopologyHandler):
 
                 # Prepare the base metadata dict, correctly flagging
                 # all types of sensors (e.g., 'sensor', 'dhw_sensor')
-                metadata: dict[str, Any] = {}
+                metadata: SchemaT = {}
                 device_role_str = (
                     str(device_role) if device_role is not None else ""
                 )
