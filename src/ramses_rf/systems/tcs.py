@@ -618,7 +618,8 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
         super().__init__(*args, **kwargs)
         self._dhw: DhwZone | None = None
 
-    # TODO: should be a private method
+    # public: declared on the _HasZones runtime_checkable Protocol
+    # (topology.py) — renaming breaks isinstance() protocol checks
     def get_dhw_zone(
         self, *, msg: Message | None = None, **schema: Any
     ) -> DhwZone:

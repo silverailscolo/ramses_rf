@@ -36,6 +36,7 @@ from ramses_rf.discovery_scan import (
     _recompute_confidence,
     _should_update_domain_id,
 )
+from ramses_tx.const import SZ_ACTIVE_HGI
 from ramses_tx.dtos import PacketDTO
 
 # ---------------------------------------------------------------------------
@@ -1087,6 +1088,25 @@ class TestDiscoveryScanPacketHandling:
         assert scan.get_device("18:130236") is dev  # same object
         assert dev.source_count == 2
         assert Code._10E0 in dev.codes_seen
+
+    def test_pool_member_hgi_is_known(self) -> None:
+        """Every pool member HGI counts as our own gateway, not just the
+        currently active child (multi-HGI pool, issue 1257 item 4.1).
+
+        Without the pool check, a secondary pool HGI would be flagged as
+        a discovered device whenever it is not the active transport.
+        """
+        gwy = make_mock_gateway()
+        gwy._engine._transport.get_extra_info = MagicMock(
+            side_effect=lambda key, default=None: {
+                SZ_ACTIVE_HGI: "18:001234",
+                "pool_hgi_ids": ["18:001234", "18:149488"],
+            }.get(key, default)
+        )
+        scan = DiscoveryScan(gwy)
+        assert scan._is_known("18:001234") is True  # active pool child
+        assert scan._is_known("18:149488") is True  # secondary pool member
+        assert scan._is_known("18:999999") is False  # foreign HGI
 
     def test_unknown_hgi_tracked(self) -> None:
         """An unknown HGI (e.g. neighbour's) should be tracked but not
