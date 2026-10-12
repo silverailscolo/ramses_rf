@@ -322,12 +322,19 @@ def _resolve_logical_targets(
 
     # 6. System-level opcodes (2E04/0100/313F/2D49) target the TCS directly.
     #    These packets have no domain_id/zone_index, so steps 4/5 miss them.
-    if (
-        msg.code in (Code._2E04, Code._0100, Code._313F, Code._2D49)
-        and tcs
-        and tcs not in targets
-    ):
-        targets.append(tcs)
+    #    Resolve the TCS from the controller side of the packet: for a W/RQ
+    #    echo the src is the HGI, so src_dev.tcs alone resolves to
+    #    gateway.tcs and a packet addressed to a secondary controller would
+    #    update the main TCS's system_state instead (multi-TCS schema).
+    #    See: https://github.com/ramses-rf/ramses_rf/issues/1284
+    if msg.code in (Code._2E04, Code._0100, Code._313F, Code._2D49):
+        system_tcs = (
+            getattr(src_dev, "tcs", None)
+            or getattr(dst_dev, "tcs", None)
+            or tcs
+        )
+        if system_tcs and system_tcs not in targets:
+            targets.append(system_tcs)
 
     # 7. DHW opcodes (1260/10A0/1F41) carry no domain_id/zone_index, so steps
     #    4/5 miss the DhwZone.  Route them via the shared helper.
