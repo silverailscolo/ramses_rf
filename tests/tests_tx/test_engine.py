@@ -385,3 +385,27 @@ def test_application_message_expired_fast_path(mock_dto: PacketDTO) -> None:
 
     app_msg._fraction_expired = ApplicationMessage.HAS_EXPIRED
     assert app_msg._expired is True
+
+
+@pytest.mark.asyncio
+async def test_add_to_include_mirrors_to_protocol() -> None:
+    # Devices accepted at runtime must reach the protocol's include list —
+    # it filters on a copy taken at protocol_factory time (ramses_cc 1331).
+    engine = Engine(
+        config=EngineConfig(port_name="/dev/null", disable_sending=True)
+    )
+
+    # protocol not yet created: only the engine list mutates
+    engine.add_to_include("29:176861")
+    assert "29:176861" in engine._include
+
+    engine._protocol = MagicMock()
+    engine._protocol._include = ["18:001234"]
+
+    engine.add_to_include("29:176862")
+    assert "29:176862" in engine._include
+    assert "29:176862" in engine._protocol._include
+
+    engine.remove_from_include("29:176862")
+    assert "29:176862" not in engine._include
+    assert "29:176862" not in engine._protocol._include
