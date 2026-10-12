@@ -464,6 +464,13 @@ class TestBestHvacStrategy:
 
         assert isinstance(strategy, OrconHrc350Strategy)
 
+    def test_orcon_vmd_15rms86_selects_first_domain_capability(self) -> None:
+        strategy = best_hvac_strategy(
+            "32:123456", scheme="orcon", model="VMD-15RMS86"
+        )
+
+        assert isinstance(strategy, OrconHrc350Strategy)
+
     def test_other_orcon_model_keeps_second_domain_capability(self) -> None:
         strategy = best_hvac_strategy(
             "32:153289", scheme="orcon", model="VMD-15RMS86-2"

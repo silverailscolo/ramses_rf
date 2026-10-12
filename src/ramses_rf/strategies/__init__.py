@@ -42,6 +42,11 @@ _STRATEGY_BY_SCHEME: dict[str, type[HvacStrategyBase]] = {
     "vasco": VascoStrategy,
 }
 
+#: Orcon 10E0 models that take the HRC-350 (first-domain) 31E0 demand.
+#: Matched exactly: a VMD-15RMS86-2 takes the second-domain layout
+#: (ramses-rf/ramses_rf#1187), while a VMD-15RMS86 ignores it.
+_ORCON_HRC350_EXACT_MODELS: frozenset[str] = frozenset({"VMD-15RMS86"})
+
 
 def best_hvac_strategy(
     device_id: str,
@@ -66,7 +71,14 @@ def best_hvac_strategy(
     :returns: The selected HVAC strategy.
     :rtype: HvacStrategy
     """
-    if scheme == "orcon" and model and model.upper().startswith("VMD-15RMS64"):
+    if (
+        scheme == "orcon"
+        and model
+        and (
+            model.upper().startswith("VMD-15RMS64")
+            or model.upper() in _ORCON_HRC350_EXACT_MODELS
+        )
+    ):
         return OrconHrc350Strategy()
 
     strategy_cls = _STRATEGY_BY_SCHEME.get(scheme or "", OrconStrategy)
