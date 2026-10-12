@@ -113,15 +113,15 @@ class AttrDict(dict):  # type: ignore[type-arg]
     _SZ_DEFAULT: Final = "_default"
     _SZ_SLUGS: Final = "SLUGS"
 
-    def _readonly(self, *args: Any, **kwargs: Any) -> NoReturn:
+    def _readonly(self, *args: object, **kwargs: object) -> NoReturn:
         """Raise TypeError for read-only operations."""
         raise TypeError(f"'{self.__class__.__name__}' object is read only")
 
-    def __setitem__(self, key: Any, value: Any) -> NoReturn:
+    def __setitem__(self, key: object, value: object) -> NoReturn:
         """Prevent item assignment on read-only dictionary."""
         self._readonly()
 
-    def __delitem__(self, key: Any) -> NoReturn:
+    def __delitem__(self, key: object) -> NoReturn:
         """Prevent item deletion on read-only dictionary."""
         self._readonly()
 
@@ -129,7 +129,7 @@ class AttrDict(dict):  # type: ignore[type-arg]
         """Prevent mutation on read-only object."""
         self._readonly()
 
-    def pop(self, *args: Any, **kwargs: Any) -> NoReturn:
+    def pop(self, *args: object, **kwargs: object) -> NoReturn:
         """Prevent mutation on read-only object."""
         self._readonly()
 
@@ -137,15 +137,15 @@ class AttrDict(dict):  # type: ignore[type-arg]
         """Prevent mutation on read-only object."""
         self._readonly()
 
-    def setdefault(self, *args: Any, **kwargs: Any) -> NoReturn:
+    def setdefault(self, *args: object, **kwargs: object) -> NoReturn:
         """Prevent mutation on read-only object."""
         self._readonly()
 
-    def update(self, *args: Any, **kwargs: Any) -> NoReturn:
+    def update(self, *args: object, **kwargs: object) -> NoReturn:
         """Prevent mutation on read-only object."""
         self._readonly()
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # attr_table values heterogeneous
         self,
         main_table: dict[str, dict],  # type: ignore[type-arg]  # None keys
         attr_table: dict[str, Any],
@@ -202,7 +202,7 @@ class AttrDict(dict):  # type: ignore[type-arg]
 
         super().__init__(self._forward)
 
-    def __getitem__(self, key: str) -> Any:
+    def __getitem__(self, key: str) -> Any:  # type: ignore[explicit-any]  # intentionally dynamic
         """Retrieve an item by key from the mapping."""
         if key in self._main_table:  # map[ZON_ROLE.DHW] -> "dhw_sensor"
             return list(self._main_table[key].values())[0]
@@ -212,7 +212,7 @@ class AttrDict(dict):  # type: ignore[type-arg]
             return self._reverse.__getitem__(key)
         return super().__getitem__(key)
 
-    def __getattr__(self, name: str) -> Any:
+    def __getattr__(self, name: str) -> Any:  # type: ignore[explicit-any]  # intentionally dynamic
         """Retrieve an attribute by name from the table."""
         if name in self._main_table:  # map.DHW -> "0D" (using slug)
             if (result := list(self._main_table[name].keys())[0]) is not None:
@@ -284,7 +284,7 @@ class AttrDict(dict):  # type: ignore[type-arg]
         return slugs
 
 
-def attr_dict_factory(
+def attr_dict_factory(  # type: ignore[explicit-any]  # attr_table values heterogeneous
     main_table: dict[str, dict],  # type: ignore[type-arg]  # None keys in ramses_rf/const.py
     attr_table: dict[str, Any] | None = None,
 ) -> AttrDict:  # is: SlottedAttrDict

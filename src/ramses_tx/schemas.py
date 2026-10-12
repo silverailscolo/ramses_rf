@@ -163,11 +163,11 @@ def sch_serial_port_dict_factory() -> dict[vol.Required, vol.Any]:
     SCH_SERIAL_PORT_NAME = str
 
     def normalise_serial_port_factory() -> Callable[
-        [str | PortConfigT], dict[str, Any]
+        [str | PortConfigT], dict[str, object]
     ]:
         def normalise_serial_port(
             node_value: str | PortConfigT,
-        ) -> dict[str, Any]:
+        ) -> dict[str, object]:
             if isinstance(node_value, str):
                 defaults = SCH_SERIAL_PORT_CONFIG({})
                 return {SZ_PORT_NAME: node_value} | {
@@ -190,7 +190,7 @@ def sch_serial_port_dict_factory() -> dict[vol.Required, vol.Any]:
     }
 
 
-def extract_serial_port(
+def extract_serial_port(  # type: ignore[explicit-any]  # schema dict heterogeneous
     serial_port_dict: dict[str, Any],
 ) -> tuple[str, PortConfigT]:
     """Extract serial port and port config tuple from schema."""

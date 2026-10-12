@@ -420,29 +420,19 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                     ),
                 )
 
-        elif code == Code._0404:  # FIXME
-            intent1 = Intent(
-                src=HGI_DEV_ADDR,
-                dst=Address(device_id),
-                action=Action.GET_SCHEDULE_FRAGMENT,
-                data={
-                    SZ_ZONE_INDEX: HW,
-                    SZ_FRAGMENT_NUMBER: 1,
-                    SZ_TOTAL_FRAGMENTS: 0,
-                },
-            )
-            gateway.dispatcher.send_background(intent1)
-            intent2 = Intent(
-                src=HGI_DEV_ADDR,
-                dst=Address(device_id),
-                action=Action.GET_SCHEDULE_FRAGMENT,
-                data={
-                    SZ_ZONE_INDEX: "00",
-                    SZ_FRAGMENT_NUMBER: 1,
-                    SZ_TOTAL_FRAGMENTS: 0,
-                },
-            )
-            gateway.dispatcher.send_background(intent2)
+        elif code == Code._0404:
+            for zone_idx in (HW, *(f"{i:02X}" for i in range(16))):
+                intent = Intent(
+                    src=HGI_DEV_ADDR,
+                    dst=Address(device_id),
+                    action=Action.GET_SCHEDULE_FRAGMENT,
+                    data={
+                        SZ_ZONE_INDEX: zone_idx,
+                        SZ_FRAGMENT_NUMBER: 1,
+                        SZ_TOTAL_FRAGMENTS: 0,
+                    },
+                )
+                gateway.dispatcher.send_background(intent)
 
         elif code == Code._0418:
             for log_index in range(2):

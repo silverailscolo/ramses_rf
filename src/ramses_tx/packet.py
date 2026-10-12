@@ -9,7 +9,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from datetime import datetime as dt, timedelta as td
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import orjson
 
@@ -19,6 +19,9 @@ from .const import I_, RAW_LINE_REGEX, RP, W_, Code, Verb
 from .dtos import CommandDTO, PacketDTO
 from .logger import getLogger
 from .typing import HeaderT, PayloadT
+
+if TYPE_CHECKING:
+    from ramses_rf.payloads.base import PayloadBase
 
 _LOGGER = logging.getLogger(__name__)
 PKT_LOGGER = getLogger(f"{__name__}_log", packet_log=True)
@@ -359,7 +362,7 @@ class Packet:
         return packet
 
     @property
-    def _packet_extra(self) -> dict[str, Any]:
+    def _packet_extra(self) -> dict[str, object]:
         """Return extra dictionary attributes for PKT_LOGGER logging."""
         return {
             "_frame": getattr(self, "_frame", ""),
@@ -547,7 +550,7 @@ class Packet:
         return self._dto.raw_payload
 
     @property
-    def payload(self) -> Any:
+    def payload(self) -> PayloadBase | list[PayloadBase] | str:
         """Return the typed payload dataclass object or raw hex string.
 
         TODO: Temporary fallback for PR 10 transition. In PR 12 of #1001,
@@ -562,7 +565,7 @@ class Packet:
         return PayloadT(self._dto.raw_payload)
 
     @payload.setter
-    def payload(self, value: Any) -> None:
+    def payload(self, value: PayloadBase | list[PayloadBase] | str) -> None:
         """Set the payload object or hex string (updates internal PacketDTO).
 
         TODO: Temporary fallback for PR 10 transition. In PR 12 of #1001,
@@ -793,8 +796,8 @@ class Packet:
         return self._dto
 
     def to_dict(
-        self, parsed_payload: dict[str, Any] | list[Any] | None = None
-    ) -> dict[str, Any]:
+        self, parsed_payload: dict[str, object] | list[object] | None = None
+    ) -> dict[str, object]:
         """Serialize packet state for JSON storage and warm-restart persistence.
 
         :param parsed_payload: Optional parsed domain payload data
@@ -815,7 +818,7 @@ class Packet:
             with contextlib.suppress(ValueError):
                 rssi = int(rssi_val)
 
-        result: dict[str, Any] = {
+        result: dict[str, object] = {
             "dtm": dtm_str,
             "rssi": rssi,
             "verb": dto.verb,
@@ -843,7 +846,9 @@ class Packet:
         return orjson.dumps(self.to_dict())
 
     @classmethod
-    def from_dict(cls, dtm: str, state: dict[str, Any] | str) -> Packet:
+    def from_dict(  # type: ignore[explicit-any]  # deserialized heterogeneous dict
+        cls, dtm: str, state: dict[str, Any] | str
+    ) -> Packet:
         """Deserialize stored state dictionary or log line during warm restart.
 
         :param dtm: ISO timestamp string
@@ -887,7 +892,7 @@ class Packet:
         :returns: Instantiated Packet object
         :rtype: Packet
         """
-        raw: dict[str, Any] = orjson.loads(json_data)
+        raw = orjson.loads(json_data)
         if "timestamp" in raw and ("raw_payload" in raw or "payload" in raw):
             raw_payload_val = raw.get("raw_payload")
             if not isinstance(raw_payload_val, str) or not raw_payload_val:

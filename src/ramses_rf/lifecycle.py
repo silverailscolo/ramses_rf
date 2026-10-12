@@ -8,11 +8,12 @@ import contextlib
 import logging
 from datetime import UTC, datetime as dt, timedelta as td
 from logging.handlers import QueueListener
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ramses_tx import Packet, protocol_factory, set_packet_logging_config
 from ramses_tx.const import SZ_ACTIVE_HGI
 from ramses_tx.logger import flush_packet_log
+from ramses_tx.typing import PktLogConfigT
 
 from .const import (
     DONT_CREATE_MESSAGES,
@@ -91,7 +92,7 @@ class GatewayLifecycle:
         """Start the Gateway."""
         _, self._packet_log_listener = await set_packet_logging_config(
             cc_console=(self.config.reduce_processing >= DONT_CREATE_MESSAGES),
-            **self._engine.packet_log,
+            **cast(PktLogConfigT, self._engine.packet_log),
         )
 
         if self._packet_log_listener:
