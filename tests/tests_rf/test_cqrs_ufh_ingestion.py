@@ -17,6 +17,8 @@ from ramses_rf.const import (
     SZ_MODE,
     SZ_PUMP_RELAY_STATE,
     SZ_RELAY_DEMAND,
+    SZ_REMAINING_DAYS,
+    SZ_REMAINING_PERCENT,
     SZ_SETPOINT,
     SZ_SETPOINT_BOUNDS,
     SZ_STATE,
@@ -25,15 +27,21 @@ from ramses_rf.const import (
     SZ_UFH_INDEX,
     SZ_ZONE_INDEX,
 )
+from ramses_rf.devices.hvac_ventilators import HvacVentilator
 from ramses_rf.enums import DevType, PumpRelayState
 from ramses_rf.models import (
+    HvacState,
     StateUpdatedEvent,
     UfhCircuitState,
     UfhState,
 )
 from ramses_rf.pipeline.ingestion import StateProjector
+from ramses_rf.state_projector import (
+    _update_hvac_state as _sp_update_hvac_state,
+)
 from ramses_tx.address import NON_DEV_ADDR, Address
 from ramses_tx.const import Code, Verb
+from ramses_tx.typing import DeviceIdT
 
 
 class MockUfcTarget:
@@ -382,3 +390,63 @@ def test_update_ufh_state_timestamp_propagation() -> None:
     assert target.ufh_state.last_updated == test_dtm
     assert target.ufh_state.circuits["02"].last_updated == test_dtm
     assert target.received_events[0].state.last_updated == test_dtm
+
+
+class MockRemTarget:
+    """Mock target representing a remote (REM) receiving a 10D0 RP.
+
+    Has ``hvac_state`` (remotes get one) but no ``_supports_10d0`` —
+    that flag only exists on HvacVentilator (ramses_cc issue 1330).
+    """
+
+    _SLUG = DevType.REM
+    id = "29:176861"
+
+    def __init__(self) -> None:
+        self.hvac_state: HvacState = HvacState()
+        self.received_events: list[StateUpdatedEvent] = []
+
+    def apply_state_update(self, event: StateUpdatedEvent) -> None:
+        if isinstance(event.state, HvacState):
+            self.hvac_state = event.state
+            self.received_events.append(event)
+
+
+def test_update_hvac_state_10d0_rp_to_non_fan_no_crash() -> None:
+    # A 10D0 RP is addressed to the *requester* — a REM/HGI, which lacks
+    # _supports_10d0; the support-flag block must be skipped (not crash).
+    # Arrange
+    projector = StateProjector(MagicMock(), MagicMock())
+    target = MockRemTarget()
+    msg = _make_msg(Code._10D0)
+    msg.verb = Verb.RP
+    payload = {SZ_REMAINING_DAYS: 30, SZ_REMAINING_PERCENT: None}
+
+    # Act (must not raise AttributeError)
+    projector._update_hvac_state(target, payload, msg)
+    _sp_update_hvac_state(target, payload, msg)
+
+    # Assert: no phantom flag on a non-fan device
+    assert not hasattr(target, "_supports_10d0")
+
+
+def test_update_hvac_state_10d0_rp_to_fan_sets_flag() -> None:
+    # A 10D0 RP to a real fan still flags _supports_10d0.
+    # Arrange
+    projector = StateProjector(MagicMock(), MagicMock())
+    target = HvacVentilator.__new__(HvacVentilator)
+    target.hvac_state = HvacState()
+    target._supports_10d0 = False
+    target._strategy = None
+    target._scheme = None
+    target.id = DeviceIdT("32:153289")
+    msg = _make_msg(Code._10D0)
+    msg.verb = Verb.RP
+    payload = {SZ_REMAINING_DAYS: 30, SZ_REMAINING_PERCENT: None}
+
+    # Act
+    projector._update_hvac_state(target, payload, msg)
+    _sp_update_hvac_state(target, payload, msg)
+
+    # Assert
+    assert target._supports_10d0 is True
