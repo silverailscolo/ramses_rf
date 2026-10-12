@@ -927,7 +927,10 @@ class StateProjector:
         # Flag filter_remaining support on device
         if (
             msg.code == Code._10D0
-            and not cast(HvacVentilator, target)._supports_10d0
+            # a 10D0 RP is addressed to the *requester* — which may be an
+            # HGI/REM, not a fan; only devices that *declare* the flag get
+            # flagged (ramses_cc issue 1330)
+            and getattr(target, "_supports_10d0", None) is False
             and (
                 payload[SZ_REMAINING_DAYS] is not None
                 or payload[SZ_REMAINING_PERCENT] is not None

@@ -198,6 +198,14 @@ class Engine:
         if device_id not in self._include:
             self._include.append(device_id)
 
+        # The protocol filters on a *copy* of this list taken when
+        # protocol_factory ran; mirror the change or a device accepted at
+        # runtime stays filtered until the next reload (ramses_cc issue
+        # 1331).
+        proto_include = getattr(self._protocol, "_include", None)
+        if proto_include is not None and device_id not in proto_include:
+            proto_include.append(device_id)
+
     def remove_from_include(self, device_id: str) -> None:
         """Remove a device ID from the include list if present.
 
@@ -208,6 +216,10 @@ class Engine:
         """
         if device_id in self._include:
             self._include.remove(device_id)
+
+        proto_include = getattr(self._protocol, "_include", None)
+        if proto_include is not None and device_id in proto_include:
+            proto_include.remove(device_id)
 
     @property
     def enforce_known_list(self) -> bool:
