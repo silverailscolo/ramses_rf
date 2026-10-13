@@ -212,7 +212,8 @@ async def test_polling_manager_shadow_execution_parity(
     processed_count = await poller.poll_due_commands()
 
     # ASSERT
-    assert processed_count == len(DEFAULT_POLLING_SCHEDULES["CTL"])
+    # 000C produces no task for a zoneless CTL (per-zone expansion only)
+    assert processed_count == len(poller.get_scheduled_cmds())
     # Crucial Shadow Mode Guarantee: Zero RF network transmissions
     mock_gateway._async_send_dto.assert_not_called()
 
@@ -334,7 +335,8 @@ async def test_polling_manager_live_dispatch_cutover(
     processed_count = await poller.poll_due_commands()
 
     # ASSERT
-    assert processed_count == len(DEFAULT_POLLING_SCHEDULES["CTL"])
+    # 000C produces no task for a zoneless CTL (per-zone expansion only)
+    assert processed_count == len(poller.get_scheduled_cmds())
     assert mock_gateway._async_send_dto.call_count == processed_count
 
     call_args = mock_gateway._async_send_dto.call_args_list[0][0]
@@ -373,7 +375,7 @@ def test_polling_manager_ctl_without_tcs_creates_device_level_0004(
 def test_polling_manager_ctl_with_zones_expands_0004_2349_and_30C9_per_zone(
     mock_gateway: MagicMock,
 ) -> None:
-    """CTL with a TCS and zones gets per-zone 0004, 2349, and 30C9 tasks.
+    """CTL with a TCS and zones gets per-zone 0004, 000C, 2349, 30C9 tasks.
 
     0004 (zone name) is expanded for all zones (issue 947).
     2349 (zone mode) is expanded for all zones — the CTL does not
@@ -381,6 +383,9 @@ def test_polling_manager_ctl_with_zones_expands_0004_2349_and_30C9_per_zone(
     30C9 (zone temperature) is expanded for zones without a sensor
     (issue 1013).  In this test, the mock zones have no sensor, so all
     zones get 30C9 tasks.
+    000C (zone devices) is expanded for zones without a sensor — the
+    role-04 binding reply declares the zone's authoritative sensor
+    (ramses-rf/ramses_cc#1334, ramses-rf/ramses_cc#1344).
     """
     # ARRANGE
     poller = PollingManager(mock_gateway, shadow_mode=True)
@@ -403,11 +408,12 @@ def test_polling_manager_ctl_with_zones_expands_0004_2349_and_30C9_per_zone(
 
     # ASSERT
     # 5 device-level tasks (10E0, 1F41, 2E04, 313F, 1100)
-    # + 2 zone-level 0004 tasks + 2 zone-level 2349 tasks + 2 zone-level 30C9 tasks
+    # + 2 zone-level 0004 tasks + 2 zone-level 000C tasks
+    # + 2 zone-level 2349 tasks + 2 zone-level 30C9 tasks
     device_level = {k for k in active_keys if len(k) == 2}
     zone_level = {k for k in active_keys if len(k) == 3}
     assert len(device_level) == 5
-    assert len(zone_level) == 6
+    assert len(zone_level) == 8
 
     # Zone-level keys for 0004
     assert ("01:111111", Code._0004, "03") in zone_level
@@ -447,6 +453,15 @@ def test_polling_manager_ctl_with_zones_expands_0004_2349_and_30C9_per_zone(
     task_30c9_07 = poller._tasks[("01:111111", Code._30C9, "07")]
     assert task_30c9_07.payload == "07"
     assert task_30c9_07.code == Code._30C9
+
+    # Verify the 000C tasks have the correct payload (zone_index + role 04)
+    task_000c_03 = poller._tasks[("01:111111", Code._000C, "03")]
+    assert task_000c_03.payload == "0304"
+    assert task_000c_03.code == Code._000C
+
+    task_000c_07 = poller._tasks[("01:111111", Code._000C, "07")]
+    assert task_000c_07.payload == "0704"
+    assert task_000c_07.code == Code._000C
 
     # Device-level tasks have no payload (default "00" in build_rq_cmd)
     task_10e0 = poller._tasks[("01:111111", Code._10E0)]
