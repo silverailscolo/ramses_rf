@@ -213,6 +213,9 @@ class PollingManager:
         self._tasks: dict[tuple[str, ...], PollingTask] = {}
         self._poller_task: asyncio.Task[object] | None = None
         self._running: bool = False
+        # Set when tasks are added/rescheduled so a sleeping poll loop
+        # re-evaluates immediately instead of waiting out its old sleep.
+        self._wake_event = asyncio.Event()
 
     @property
     def is_running(self) -> bool:
@@ -369,9 +372,14 @@ class PollingManager:
                             next_due=now + td(seconds=interval),
                             payload=payload,
                         )
+                        self._wake_event.set()
                     else:
-                        self._tasks[zkey].interval = interval
-                        self._tasks[zkey].payload = payload
+                        task = self._tasks[zkey]
+                        if task.interval != interval:
+                            task.next_due = now + td(seconds=interval)
+                            task.interval = interval
+                            self._wake_event.set()
+                        task.payload = payload
             elif code == Code._2349 and zone_indexs:
                 # Expand into per-zone tasks (all zones — mode is needed
                 # regardless of whether the zone has a sensor).  2349 RQ
@@ -388,9 +396,14 @@ class PollingManager:
                             next_due=now + td(seconds=interval),
                             payload=payload,
                         )
+                        self._wake_event.set()
                     else:
-                        self._tasks[zkey].interval = interval
-                        self._tasks[zkey].payload = payload
+                        task = self._tasks[zkey]
+                        if task.interval != interval:
+                            task.next_due = now + td(seconds=interval)
+                            task.interval = interval
+                            self._wake_event.set()
+                        task.payload = payload
             elif code == Code._30C9 and zone_indexs_no_sensor:
                 # Expand into per-zone tasks (only zones without a sensor)
                 for zone_index in zone_indexs_no_sensor:
@@ -405,9 +418,14 @@ class PollingManager:
                             next_due=now + td(seconds=interval),
                             payload=payload,
                         )
+                        self._wake_event.set()
                     else:
-                        self._tasks[zkey].interval = interval
-                        self._tasks[zkey].payload = payload
+                        task = self._tasks[zkey]
+                        if task.interval != interval:
+                            task.next_due = now + td(seconds=interval)
+                            task.interval = interval
+                            self._wake_event.set()
+                        task.payload = payload
             elif code == Code._3220 and slug == DevType.OTB:
                 # Expand into per-Data-ID OpenTherm query tasks
                 for data_id in OPENTHERM_POLL_DATA_IDS:
@@ -422,9 +440,14 @@ class PollingManager:
                             next_due=now + td(seconds=interval),
                             payload=payload,
                         )
+                        self._wake_event.set()
                     else:
-                        self._tasks[ot_key].interval = interval
-                        self._tasks[ot_key].payload = payload
+                        task = self._tasks[ot_key]
+                        if task.interval != interval:
+                            task.next_due = now + td(seconds=interval)
+                            task.interval = interval
+                            self._wake_event.set()
+                        task.payload = payload
             else:
                 dkey = (device.id, code)
                 active_keys.add(dkey)
@@ -444,8 +467,17 @@ class PollingManager:
                         interval=interval,
                         next_due=now + td(seconds=delay),
                     )
+                    self._wake_event.set()
                 else:
-                    self._tasks[dkey].interval = interval
+                    task = self._tasks[dkey]
+                    if task.interval != interval:
+                        # Reschedule from now so the new cadence applies
+                        # at once — e.g. the 10E0/10D0 keep-alive swap
+                        # when supports_10d0 is confirmed (issue 1288),
+                        # or a user polling_interval override.
+                        task.next_due = now + td(seconds=interval)
+                        task.interval = interval
+                        self._wake_event.set()
 
         return active_keys
 
@@ -506,8 +538,15 @@ class PollingManager:
             except (RamsesException, TimeoutError) as err:
                 _LOGGER.error("Error in PollingManager loop: %s", err)
 
+            # Clear before computing the sleep so a concurrent schedule
+            # update is either reflected in the computed interval or
+            # leaves the event set for the wait below — no lost wake-up.
+            self._wake_event.clear()
             sleep_secs = self._calculate_next_sleep_interval()
-            await asyncio.sleep(sleep_secs)
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(
+                    self._wake_event.wait(), timeout=sleep_secs
+                )
 
     async def poll_due_commands(self) -> int:
         """Evaluate tracked tasks and process commands that are due.
