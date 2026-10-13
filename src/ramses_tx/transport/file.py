@@ -7,7 +7,6 @@ import asyncio
 import functools
 import logging
 from io import TextIOWrapper
-from typing import Any
 
 import aiofiles
 
@@ -46,7 +45,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
         /,
         *,
         config: TransportConfig,
-        extra: dict[str, Any] | None = None,
+        extra: dict[str, object] | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize the file transport."""

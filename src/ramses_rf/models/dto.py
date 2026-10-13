@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime as dt
-from typing import Any
 
 from ramses_rf.enums import ThermalMode
+from ramses_rf.typing import SchemaT
 
 from .state_opentherm import (
     OpenThermCounters,
@@ -260,8 +260,8 @@ class ZoneScheduleDTO:
     :param zone_index: Zone index string (e.g. '00', 'HW').
     :type zone_index: str
     :param schedule: Weekly schedule list of daily switchpoint dicts.
-    :type schedule: list[dict[str, Any]]
+    :type schedule: list[SchemaT]
     """
 
     zone_index: str
-    schedule: list[dict[str, Any]]
+    schedule: list[SchemaT]

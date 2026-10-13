@@ -41,6 +41,7 @@ from ..const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
 if TYPE_CHECKING:
     # pylint: disable=unused-import
     from ..const import IndexT  # noqa: F401
+    from ..gateway import Gateway
 
 
 __all__ = ["Message"]
@@ -53,7 +54,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 # Transition alias for typing until full payload migration is complete
-PayloadT: TypeAlias = Any
+PayloadT: TypeAlias = Any  # type: ignore[explicit-any]  # legacy payload union
 
 
 # TypeVar bound to Message to allow strict inheritance typing
@@ -66,9 +67,9 @@ class Message:
     # Domain Bridges (Injected by Gateway)
     _IS_CONTROLLER_CB: Callable[[str], bool] | None = None
     _GET_CODE_NAME_CB: Callable[[Code | str], str] | None = None
-    _GET_MSG_INDEX_CB: Callable[[Any], dict[str, str]] | None = None
+    _GET_MSG_INDEX_CB: Callable[[Message], dict[str, str]] | None = None
 
-    _gateway: Any | None = None
+    _gateway: Gateway | None = None
 
     def __init__(self, dto: PacketDTO) -> None:
         """Create a message from a valid packet.
@@ -203,7 +204,9 @@ class Message:
         return self._format_frame(self.seqn)
 
     @classmethod
-    def _from_packet(cls: type[_MessageT], packet: Any) -> _MessageT:
+    def _from_packet(  # type: ignore[explicit-any]  # legacy Packet | Message
+        cls: type[_MessageT], packet: Any
+    ) -> _MessageT:
         """Create a Message (or subclass) from a legacy Packet.
 
         :param packet: The legacy packet object.

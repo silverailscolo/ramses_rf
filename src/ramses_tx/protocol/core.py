@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Final, TypeAlias
+from typing import TYPE_CHECKING, Final, TypeAlias, cast
 
 from ..address import HGI_DEVICE_ID
 from ..const import (
@@ -39,6 +39,9 @@ from ..packet import Packet
 from ..routing import RoutedCommand, RouteRequest, SourcePolicy, WriteOutcome
 from ..typing import DeviceIdT, HeaderT, MsgHandlerT, QosParams
 from .base import DEFAULT_QOS, _DeviceIdFilterMixin
+
+if TYPE_CHECKING:
+    from ..interfaces import TransportInterface
 
 _DBG_DISABLE_IMPERSONATION_ALERTS: Final[bool] = False
 _DBG_DISABLE_QOS: Final[bool] = False
@@ -89,7 +92,11 @@ class ReadProtocol(_DeviceIdFilterMixin):
         self._pause_writing = True
 
     def connection_made(
-        self, transport: Any, /, *, ramses: bool = False
+        self,
+        transport: asyncio.BaseTransport | TransportInterface,
+        /,
+        *,
+        ramses: bool = False,
     ) -> None:
         """Consume callback if invoked by SerialTransport rather than PortTransport.
 
@@ -293,7 +300,11 @@ class PortProtocol(_DeviceIdFilterMixin):
         return self._send_timeout_limit
 
     def connection_made(
-        self, transport: Any, /, *, ramses: bool = False
+        self,
+        transport: asyncio.BaseTransport | TransportInterface,
+        /,
+        *,
+        ramses: bool = False,
     ) -> None:
         """Consume callback if invoked by SerialTransport rather than PortTransport.
 
@@ -327,7 +338,7 @@ class PortProtocol(_DeviceIdFilterMixin):
                 "%s: Transport bound after wait cancelled (late connection)",
                 self,
             )
-            self._transport = transport
+            self._transport = cast(TransportInterface, transport)
 
         # Safe access with check (optional but recommended)
         if self._transport:

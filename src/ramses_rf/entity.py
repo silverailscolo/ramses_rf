@@ -6,7 +6,10 @@ from __future__ import annotations
 import logging
 from inspect import getmembers, isclass
 from sys import modules
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
+
+from ramses_rf.typing import SchemaT
+from ramses_tx.typing import DeviceIdT, DevIndexT
 
 from .models import (
     DemandState,
@@ -23,7 +26,6 @@ from .state import EntityState
 
 if TYPE_CHECKING:
     from ramses_tx import Packet
-    from ramses_tx.typing import DeviceIdT, DevIndexT
 
     from .gateway import Gateway
     from .interfaces import ControllerInterface
@@ -36,7 +38,7 @@ _ID_SLICE = 9
 _LOGGER = logging.getLogger(__name__)
 
 
-def class_by_attr(name: str, attr: str) -> dict[str, Any]:
+def class_by_attr(name: str, attr: str) -> SchemaT:
     """Return a mapping of a (unique) attr of classes in a module to that class.
 
     :param name: The module name to inspect.
@@ -44,10 +46,10 @@ def class_by_attr(name: str, attr: str) -> dict[str, Any]:
     :param attr: The attribute name to use as a key.
     :type attr: str
     :returns: A dictionary mapping attribute values to classes.
-    :rtype: dict[str, Any]
+    :rtype: SchemaT
     """
 
-    def predicate(m: Any) -> bool:
+    def predicate(m: object) -> bool:
         return (
             isclass(m)
             and m.__module__ == name

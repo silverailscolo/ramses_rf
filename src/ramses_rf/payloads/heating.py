@@ -4,10 +4,12 @@ This module contains strongly-typed dataclass representations for CH / Evohome
 packet payloads.
 """
 
+from __future__ import annotations
+
 import struct
 from dataclasses import dataclass
 from datetime import datetime as dt
-from typing import Any, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from ramses_rf.const import (
     DEV_ROLE_MAP,
@@ -69,6 +71,7 @@ from ramses_rf.const import (
     Verb,
 )
 from ramses_rf.enums import DevType, PumpRelayState
+from ramses_rf.typing import PayloadT
 from ramses_tx.address import (
     ALL_DEV_ADDR,
     NON_DEV_ADDR,
@@ -81,6 +84,9 @@ from ramses_tx.typing import DeviceIdT
 
 from .base import PayloadBase, parse_index
 from .registry import register_payload
+
+if TYPE_CHECKING:
+    from ramses_rf.messages.base import Message
 
 # ----------------------------------------------------------------------
 
@@ -102,7 +108,7 @@ class HeatDemandPayload(PayloadBase):
         demand_percent: int = 0,
         raw_extra: bytes | None = None,
         _is_array_item: bool = False,
-    ) -> "HeatDemand1BPayload | HeatDemand2BPayload":
+    ) -> HeatDemand1BPayload | HeatDemand2BPayload:
         """Construct HeatDemand payload variant dynamically."""
         if domain_or_zone_index is not None:
             return HeatDemand2BPayload(
@@ -116,7 +122,7 @@ class HeatDemandPayload(PayloadBase):
     @classmethod
     def from_bytes(
         cls, raw_data: bytes
-    ) -> "HeatDemandPayload | list[HeatDemandPayload]":
+    ) -> HeatDemandPayload | list[HeatDemandPayload]:
         """Unpack heat demand payload, dispatching by length."""
         if not raw_data:
             raise ValueError("Payload data cannot be empty")
@@ -194,13 +200,13 @@ class HeatDemand1BPayload(HeatDemandPayload):
         """
         return struct.pack(self._STRUCT_FMT, self.demand_percent & 0xFF)
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert heat demand payload to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded heat demand dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         if self.demand_percent == 0xF2:
             return {SZ_HEAT_DEMAND_FAULT: "unavailable"}
@@ -273,16 +279,16 @@ class HeatDemand2BPayload(HeatDemandPayload):
             buffer += self.raw_extra
         return buffer
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert heat demand payload to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded heat demand dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         if self.demand_percent == 0xF2:
-            result: dict[str, Any] = {SZ_HEAT_DEMAND_FAULT: "unavailable"}
+            result: PayloadT = {SZ_HEAT_DEMAND_FAULT: "unavailable"}
         else:
             value = self.demand_percent / 200.0
             if value == 1.01:
@@ -335,7 +341,7 @@ class TemperaturePayload(PayloadBase):
         cls,
         zone_index: int | str | None = None,
         temperature: float | bool | None = None,
-    ) -> "Temperature2BPayload | Temperature3BPayload":
+    ) -> Temperature2BPayload | Temperature3BPayload:
         """Construct Temperature payload variant dynamically from arguments."""
         if zone_index is not None:
             return Temperature3BPayload(
@@ -355,7 +361,7 @@ class TemperaturePayload(PayloadBase):
     @classmethod
     def from_bytes(
         cls, raw_data: bytes
-    ) -> "TemperaturePayload | list[TemperaturePayload]":
+    ) -> TemperaturePayload | list[TemperaturePayload]:
         """Unpack binary payload, dispatching by length."""
         if len(raw_data) > 3 and len(raw_data) % 3 == 0:
             return [
@@ -424,7 +430,7 @@ class Temperature2BPayload(TemperaturePayload):
             temp_raw = int(round(self.temperature * 100.0))
         return struct.pack(self._STRUCT_FMT, temp_raw)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert 2-byte temperature payload to legacy dictionary layout."""
         return {SZ_TEMPERATURE: self.temperature}
 
@@ -481,7 +487,7 @@ class Temperature3BPayload(TemperaturePayload):
         index = parse_index(self.zone_index)
         return struct.pack(self._STRUCT_FMT, index, temp_raw)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert 3-byte temperature payload to legacy dictionary layout."""
         index_str = (
             f"{self.zone_index:02X}"
@@ -599,13 +605,13 @@ class ScheduleFragmentPayload(PayloadBase):
         )
         return hdr + self.fragment_bytes
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert schedule fragment payload to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded schedule fragment dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         if self.zone_index in (0xFA, "HW"):
             zone_str = "HW"
@@ -613,7 +619,7 @@ class ScheduleFragmentPayload(PayloadBase):
             zone_str = f"{self.zone_index:02X}"
         else:
             zone_str = str(self.zone_index)
-        result: dict[str, Any] = {
+        result: PayloadT = {
             SZ_ZONE_INDEX: zone_str,
             SZ_FRAGMENT_NUMBER: self.frag_number,
             SZ_TOTAL_FRAGMENTS: self.total_frags
@@ -771,7 +777,7 @@ class SystemSyncPayload(PayloadBase):
         _unknown_20: int | None = None,
         _unknown_21: int | None = None,
         _raw_extra: bytes | None = None,
-    ) -> "SystemSync1BPayload | SystemSyncVarPayload":
+    ) -> SystemSync1BPayload | SystemSyncVarPayload:
         """Construct SystemSync payload variant dynamically from arguments."""
         if any(
             x is not None
@@ -800,7 +806,7 @@ class SystemSyncPayload(PayloadBase):
         return SystemSync1BPayload(sync_flag=sync_flag)
 
     @classmethod
-    def from_bytes(cls, raw_data: bytes) -> "SystemSyncPayload":
+    def from_bytes(cls, raw_data: bytes) -> SystemSyncPayload:
         """Unpack system sync binary payload, dispatching by length."""
         if len(raw_data) <= 1:
             return SystemSync1BPayload.from_bytes(raw_data)
@@ -853,7 +859,7 @@ class SystemSync1BPayload(SystemSyncPayload):
         """Pack 1-byte system sync binary payload."""
         return struct.pack(self._STRUCT_FMT, self.sync_flag)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert 1-byte system sync payload to legacy dictionary layout."""
         return {
             SZ_SYNC_FLAG: self.sync_flag,
@@ -995,9 +1001,9 @@ class SystemSyncVarPayload(SystemSyncPayload):
             result += self._raw_extra
         return result
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert multi-parameter system sync payload to dictionary."""
-        result: dict[str, Any] = {}
+        result: PayloadT = {}
         if self._unknown_20 is not None or self._unknown_21 is not None:
             if self._unknown_20 is not None:
                 result["unknown_20"] = self._unknown_20
@@ -1087,18 +1093,18 @@ class BindingPayload(PayloadBase):
             + self.binding_data
         )
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert 1FC9 binding payload to legacy dictionary representation.
 
         :param msg: Optional Message context for legacy compatibility.
         :type msg: Any
         :returns: Dictionary representation of binding payload.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         payload_hex = (
             (bytes([self.binding_type]) + self.binding_data).hex().upper()
         )
-        result: dict[str, Any] = {}
+        result: PayloadT = {}
 
         if msg is not None:
             verb = getattr(msg, "verb", Verb.I_)
@@ -1305,11 +1311,11 @@ class ZoneConfigPayload(PayloadBase):
             max_raw,
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert zone config payload to legacy dictionary layout.
 
         :returns: Decoded zone config dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         bitmap = self.zone_flags
         # zone_index is included so that _resolve_logical_targets in
@@ -1344,7 +1350,7 @@ class ZoneNamePayload(PayloadBase):
         zone_index: int | str = 0,
         name: str | None = None,
         setpoint_temp: float | None = None,
-    ) -> "ZoneName22BPayload | ZoneNameShort3BPayload":
+    ) -> ZoneName22BPayload | ZoneNameShort3BPayload:
         """Construct ZoneName payload variant dynamically."""
         if setpoint_temp is not None:
             return ZoneNameShort3BPayload(
@@ -1355,7 +1361,7 @@ class ZoneNamePayload(PayloadBase):
     @classmethod
     def from_bytes(
         cls, raw_data: bytes
-    ) -> "ZoneName22BPayload | ZoneNameShort3BPayload":
+    ) -> ZoneName22BPayload | ZoneNameShort3BPayload:
         """Unpack zone name payload, dispatching by length."""
         if len(raw_data) >= 22:
             return ZoneName22BPayload.from_bytes(raw_data)
@@ -1446,11 +1452,11 @@ class ZoneName22BPayload(ZoneNamePayload):
         )
         return struct.pack(self._STRUCT_FMT, index, name_bytes)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert zone name payload to legacy dictionary layout.
 
         :returns: Decoded zone name dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         if self.name is None:
             return {}
@@ -1522,11 +1528,11 @@ class ZoneNameShort3BPayload(ZoneNamePayload):
             2, byteorder="big", signed=True
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert zone setpoint payload to legacy dictionary layout.
 
         :returns: Decoded zone setpoint dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         index_str = (
             f"{self.zone_index:02X}"
@@ -1628,15 +1634,15 @@ class OutdoorTempPayload(PayloadBase):
         temp_raw = int(round(self.temperature * 100.0))
         return struct.pack(self._STRUCT_FMT, temp_raw)
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert 12C0 payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded temperature dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
-        result: dict[str, Any] = {SZ_TEMPERATURE: self.temperature}
+        result: PayloadT = {SZ_TEMPERATURE: self.temperature}
         if self._units is not None:
             result["units"] = {
                 "00": "Celsius",
@@ -1663,7 +1669,7 @@ class ZoneSetpointPayload(PayloadBase):
         cls,
         zone_index: int | str = 0,
         setpoint_temp: float | bool | None = None,
-    ) -> "ZoneSetpoint3BPayload":
+    ) -> ZoneSetpoint3BPayload:
         """Construct ZoneSetpoint payload variant dynamically."""
         return ZoneSetpoint3BPayload(
             zone_index=zone_index, setpoint_temp=setpoint_temp
@@ -1672,7 +1678,7 @@ class ZoneSetpointPayload(PayloadBase):
     @classmethod
     def from_bytes(
         cls, raw_data: bytes
-    ) -> "ZoneSetpointPayload | list[ZoneSetpointPayload]":
+    ) -> ZoneSetpointPayload | list[ZoneSetpointPayload]:
         """Unpack zone setpoint payload (single or array entries)."""
         if len(raw_data) < 3:
             raise ValueError(
@@ -1773,11 +1779,11 @@ class ZoneSetpoint3BPayload(ZoneSetpointPayload):
         index = parse_index(self.zone_index)
         return struct.pack(self._STRUCT_FMT, index, sp_raw)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert setpoint info payload to legacy dictionary layout.
 
         :returns: Decoded setpoint info dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         index_str = (
             f"{self.zone_index:02X}"
@@ -1859,11 +1865,11 @@ class FlowTempPayload(PayloadBase):
         )
         return struct.pack(self._STRUCT_FMT, self.domain_index, temp_raw)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert flow temperature payload to legacy dictionary layout.
 
         :returns: Decoded flow temperature dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {SZ_TEMPERATURE: self.temperature}
 
@@ -1892,7 +1898,7 @@ class SystemZonesPayload(PayloadBase):
         zone_type: int = 0,
         zone_mask: int = 0,
         zone_class_id: int = 0,
-    ) -> "SystemZones4BPayload":
+    ) -> SystemZones4BPayload:
         """Construct SystemZones payload variant dynamically from arguments."""
         return SystemZones4BPayload(
             zone_type=zone_type,
@@ -1901,8 +1907,8 @@ class SystemZonesPayload(PayloadBase):
         )
 
     def to_dict(  # type: ignore[override]
-        self, msg: Any = None
-    ) -> dict[str, Any] | list[dict[str, Any]]:
+        self, msg: Message | None = None
+    ) -> PayloadT | list[PayloadT]:
         """Convert system zones payload to legacy dictionary layout."""
         z_type = getattr(self, SZ_ZONE_TYPE, 0)
         z_mask = getattr(self, SZ_ZONE_MASK, 0)
@@ -2050,7 +2056,7 @@ class RelayDemandPayload(PayloadBase):
         domain_or_zone_index: int = 0,
         demand_percent: float = 0.0,
         raw_extra: bytes | None = None,
-    ) -> "RelayDemand2BPayload":
+    ) -> RelayDemand2BPayload:
         """Construct RelayDemand payload variant dynamically."""
         return RelayDemand2BPayload(
             domain_or_zone_index=domain_or_zone_index,
@@ -2059,7 +2065,7 @@ class RelayDemandPayload(PayloadBase):
         )
 
     @classmethod
-    def from_bytes(cls, raw_data: bytes) -> "RelayDemand2BPayload":
+    def from_bytes(cls, raw_data: bytes) -> RelayDemand2BPayload:
         """Unpack relay demand payload, dispatching to variant."""
         return RelayDemand2BPayload.from_bytes(raw_data)
 
@@ -2141,11 +2147,11 @@ class RelayDemand2BPayload(RelayDemandPayload):
             result += self.raw_extra
         return result
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert relay demand payload to legacy dictionary layout.
 
         :returns: Decoded relay demand dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         # domain_index is included so that _update_demand_state can
         # populate the TCS's per-domain _relay_demands dict (issue 1102).
@@ -2192,7 +2198,7 @@ class ZoneDevicesPayload(PayloadBase):
         device_role_id: int = 0,
         device_id_raw: int = 0,
         sub_index: int = 0,
-    ) -> "ZoneDevices5BPayload | ZoneDevices6BPayload":
+    ) -> ZoneDevices5BPayload | ZoneDevices6BPayload:
         """Construct ZoneDevices payload variant dynamically from arguments."""
         if sub_index != 0:
             return ZoneDevices6BPayload(
@@ -2221,7 +2227,7 @@ class ZoneDevicesPayload(PayloadBase):
             else z_raw
         )
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert zone devices payload to legacy dictionary layout."""
         role_id = getattr(self, "device_role_id", 0)
         z_raw = getattr(self, "zone_index_raw", 0)
@@ -2234,7 +2240,7 @@ class ZoneDevicesPayload(PayloadBase):
         else:
             device_role = DEV_ROLE_MAP.get(role_hex, role_hex)
 
-        result: dict[str, Any] = {
+        result: PayloadT = {
             SZ_ZONE_TYPE: role_hex,
             SZ_DEVICE_ROLE: device_role,
         }
@@ -2507,11 +2513,11 @@ class MaxChSetpointPayload(PayloadBase):
         temp_raw = int(round(self.setpoint_temp * 100.0))
         return struct.pack(self._STRUCT_FMT, 0x00, temp_raw)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert max CH setpoint payload to legacy dictionary layout.
 
         :returns: Decoded setpoint dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {SZ_SETPOINT: self.setpoint_temp}
 
@@ -2614,7 +2620,7 @@ class TpiParamsPayload(PayloadBase):
     @classmethod
     def from_bytes(
         cls, raw_data: bytes
-    ) -> "TpiParams4BPayload | TpiParams8BPayload":
+    ) -> TpiParams4BPayload | TpiParams8BPayload:
         """Unpack TPI params binary payload, dispatching by length."""
         if len(raw_data) >= 8:
             return TpiParams8BPayload.from_bytes(raw_data)
@@ -2708,7 +2714,7 @@ class TpiParams4BPayload(TpiParamsPayload):
             off_raw,
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert TPI parameters payload to legacy dictionary layout."""
         dom = (
             f"{self.domain_id:02X}"
@@ -2813,7 +2819,7 @@ class TpiParams8BPayload(TpiParamsPayload):
             0x00,
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert TPI parameters payload to legacy dictionary layout."""
         dom = (
             f"{self.domain_id:02X}"
@@ -2896,7 +2902,7 @@ class ChPressurePayload(PayloadBase):
         p_raw = int(round(self.pressure_bar * 100.0))
         return struct.pack(self._STRUCT_FMT, 0x00, p_raw)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert CH pressure payload to legacy dictionary layout."""
         return {SZ_PRESSURE: self.pressure_bar}
 
@@ -2932,7 +2938,7 @@ class ZoneModePayload(PayloadBase):
         mode_code: int | str = 0,
         duration_minutes: int | None = None,
         until_dtm: str | dt | bytes | None = None,
-    ) -> "ZoneMode7BPayload | ZoneMode13BPayload":
+    ) -> ZoneMode7BPayload | ZoneMode13BPayload:
         """Construct ZoneMode payload variant dynamically."""
         if until_dtm is not None:
             return ZoneMode13BPayload(
@@ -2952,7 +2958,7 @@ class ZoneModePayload(PayloadBase):
     @classmethod
     def from_bytes(
         cls, raw_data: bytes
-    ) -> "ZoneMode4BPayload | ZoneMode7BPayload | ZoneMode13BPayload":
+    ) -> ZoneMode4BPayload | ZoneMode7BPayload | ZoneMode13BPayload:
         """Unpack zone mode payload, dispatching by length."""
         if len(raw_data) >= 13:
             return ZoneMode13BPayload.from_bytes(raw_data)
@@ -3052,11 +3058,11 @@ class ZoneMode4BPayload(ZoneModePayload):
         )
         return struct.pack(self._STRUCT_FMT, index, sp_raw, mode)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert 4-byte zone mode payload to legacy dictionary layout.
 
         :returns: Decoded zone mode dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         mode_code_hex = (
             f"{self.mode_code:02X}"
@@ -3171,11 +3177,11 @@ class ZoneMode7BPayload(ZoneModePayload):
             result += b"\xff\xff\xff"
         return result
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert 7-byte zone mode payload to legacy dictionary layout.
 
         :returns: Decoded zone mode dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         mode_code_hex = (
             f"{self.mode_code:02X}"
@@ -3188,7 +3194,7 @@ class ZoneMode7BPayload(ZoneModePayload):
             if isinstance(self.zone_index, int)
             else self.zone_index
         )
-        result: dict[str, Any] = {
+        result: PayloadT = {
             SZ_ZONE_INDEX: index_str,
             SZ_MODE: mode_str,
             SZ_SETPOINT: self.setpoint_temp,
@@ -3309,11 +3315,11 @@ class ZoneMode13BPayload(ZoneModePayload):
             result += b"\x00" * 6
         return result
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert zone mode payload to legacy dictionary layout.
 
         :returns: Decoded zone mode dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         mode_code_hex = (
             f"{self.mode_code:02X}"
@@ -3326,7 +3332,7 @@ class ZoneMode13BPayload(ZoneModePayload):
             if isinstance(self.zone_index, int)
             else self.zone_index
         )
-        result: dict[str, Any] = {
+        result: PayloadT = {
             SZ_ZONE_INDEX: index_str,
             SZ_MODE: mode_str,
             SZ_SETPOINT: self.setpoint_temp,
@@ -3409,11 +3415,11 @@ class SetpointOverridePayload(PayloadBase):
             self._STRUCT_FMT, self.domain_or_zone_index, temp_raw
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert setpoint override payload to legacy dictionary layout.
 
         :returns: Decoded setpoint override dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {SZ_SETPOINT: self.target_temp}
 
@@ -3483,11 +3489,11 @@ class ActuatorSyncPayload(PayloadBase):
         """
         return struct.pack(self._STRUCT_FMT, self.domain_id, self.sync_flag)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert actuator sync payload to legacy dictionary layout.
 
         :returns: Decoded actuator sync dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {SZ_ACTUATOR_SYNC: self.sync_flag in (0xC8, 0xFF)}
 
@@ -3642,7 +3648,7 @@ class ActuatorStatePayload(PayloadBase):
             )
         return result
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert actuator state payload to legacy dictionary layout.
 
         When decoded from a 9-byte Underfloor Heating/Cooling controller (UFC /
@@ -3651,9 +3657,9 @@ class ActuatorStatePayload(PayloadBase):
         :param msg: Optional legacy message context.
         :type msg: Any
         :returns: Decoded actuator state dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
-        result: dict[str, Any] = {
+        result: PayloadT = {
             SZ_MODULATION_LEVEL: self.modulation_level,
         }
         if self.flags_3 is not None:
@@ -3717,7 +3723,7 @@ class ActuatorCyclePayload(PayloadBase):
         actuator_countdown_sec: int | None = None,
         modulation_level: float | None = None,
         domain_index: int | None = None,
-    ) -> "ActuatorCycle6BPayload | ActuatorCycle7BPayload":
+    ) -> ActuatorCycle6BPayload | ActuatorCycle7BPayload:
         """Construct ActuatorCycle payload variant dynamically from arguments."""
         if domain_index is not None:
             return ActuatorCycle7BPayload(
@@ -3732,7 +3738,7 @@ class ActuatorCyclePayload(PayloadBase):
             modulation_level=modulation_level,
         )
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert actuator cycle payload to legacy dictionary layout."""
         return {
             SZ_CYCLE_COUNTDOWN: getattr(self, "cycle_countdown_sec", None),

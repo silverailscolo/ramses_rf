@@ -6,10 +6,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime as dt, timedelta as td
-from typing import Any, Final
+from typing import Final
 from urllib.parse import urlparse
 
 from paho.mqtt import MQTTException, client as mqtt
+from paho.mqtt.properties import Properties
+from paho.mqtt.reasoncodes import ReasonCode
 
 from ... import exceptions as exc
 from ...const import (
@@ -60,7 +62,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         /,
         *,
         config: TransportConfig,
-        extra: dict[str, Any] | None = None,
+        extra: dict[str, object] | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialise the MQTT transport."""
@@ -224,10 +226,10 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
     def _on_connect(
         self,
         client: mqtt.Client,
-        userdata: Any,
-        flags: dict[str, Any],
-        reason_code: Any,
-        properties: Any | None,
+        userdata: object,
+        flags: dict[str, object],
+        reason_code: ReasonCode,
+        properties: Properties | None,
     ) -> None:
         self._connection_mgr._on_connect(
             client, userdata, flags, reason_code, properties
@@ -236,21 +238,21 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
     def _on_connect_fail(
         self,
         client: mqtt.Client,
-        userdata: Any,
+        userdata: object,
     ) -> None:
         self._connection_mgr._on_connect_fail(client, userdata)
 
     def _on_disconnect(
         self,
         client: mqtt.Client,
-        userdata: Any,
-        *args: Any,
-        **kwargs: Any,
+        userdata: object,
+        *args: object,
+        **kwargs: object,
     ) -> None:
         self._connection_mgr._on_disconnect(client, userdata, *args, **kwargs)
 
     def _on_message(
-        self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage
+        self, client: mqtt.Client, userdata: object, msg: mqtt.MQTTMessage
     ) -> None:
         if self._closing:
             return

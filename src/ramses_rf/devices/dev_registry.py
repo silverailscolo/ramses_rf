@@ -36,7 +36,7 @@ from ramses_rf.exceptions import (
 from ramses_rf.interfaces import DeviceFilterInterface
 from ramses_rf.models import DeviceTraits, TopologyChangedEvent
 from ramses_rf.topology import Parent
-from ramses_rf.typing import DeviceIdT, DeviceListT
+from ramses_rf.typing import DeviceIdT, DeviceListT, SchemaT
 from ramses_tx.const import FA, FC
 
 if TYPE_CHECKING:
@@ -83,7 +83,7 @@ class DeviceRegistry:
         self.device_by_id: dict[DeviceIdT, Device] = {}
 
         # Temporal Process Manager Cache for Eavesdropping
-        self._orphan_telemetry: dict[str, dict[str, Any]] = {}
+        self._orphan_telemetry: dict[str, SchemaT] = {}
 
         # Strict Mypy type declarations for CQRS Read-Model data maps
         self._cqrs_actuators: dict[str, set[str]] = {}
@@ -453,7 +453,7 @@ class DeviceRegistry:
             return
 
         eavesdrop_type = event.metadata.get("eavesdrop")
-        payload: Any = event.metadata.get("payload", [])
+        payload: Any = event.metadata.get("payload", [])  # type: ignore[explicit-any]  # heterogeneous metadata
 
         # Compatibility with older stringified payloads in testing
         if isinstance(payload, str):
@@ -612,12 +612,12 @@ class DeviceRegistry:
         if not device:
             # voluptuous bug workaround:
             # https://github.com/alecthomas/voluptuous/pull/524
-            _traits_raw: dict[str, Any] = dict(
+            _traits_raw: SchemaT = dict(
                 self._config.known_list.get(device_id, {})
             )
             _traits_raw.pop("commands", None)
 
-            traits_dict: dict[str, Any] = SCH_TRAITS(
+            traits_dict: SchemaT = SCH_TRAITS(
                 self._config.known_list.get(device_id, {})
             )
             traits = DeviceTraits.from_dict(traits_dict)
@@ -799,21 +799,21 @@ class DeviceRegistry:
                 result[device.id] = dev_traits
         return result
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return the parameters for all devices.
 
         :returns: A dictionary containing parameters for all devices.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         return {
             SZ_DEVICES: {d.id: await d.params() for d in sorted(self.devices)}
         }
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the status for all devices.
 
         :returns: A dictionary containing device statuses.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         return {
             SZ_DEVICES: {d.id: await d.status() for d in sorted(self.devices)}
@@ -941,7 +941,7 @@ class DeviceRegistry:
         # 4. Swap the reference in the registry
         self.device_by_id[event.device_id] = new_dev
 
-    async def generate_schema(self) -> dict[str, Any]:
+    async def generate_schema(self) -> SchemaT:
         """Generate topology schema natively from the CQRS Read-Model.
 
         This method interrogates the mathematically correct devices and
@@ -952,11 +952,11 @@ class DeviceRegistry:
 
         :returns: A dictionary representing the complete network
             topology.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         _ACTIVE_DEGRADATION: bool = False
 
-        schema: dict[str, Any] = {}
+        schema: SchemaT = {}
         systems = self.systems
         bound_devices: set[str] = set()
 

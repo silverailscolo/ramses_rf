@@ -9,8 +9,9 @@ import logging
 import uuid
 from collections.abc import Callable
 from datetime import datetime as dt
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import TYPE_CHECKING, Final, cast
 
+from ramses_rf.typing import SchemaT
 from ramses_tx.const import RQ, Code
 
 from . import exceptions as exc, quirks
@@ -75,16 +76,27 @@ from .const import (
     SZ_ZONES,
     DevType,
 )
-from .devices.dev_base import DeviceBase
+from .devices.dev_base import Device, DeviceBase
 from .devices.hvac_ventilators import HvacVentilator
+from .entity import Entity
 from .messages import Message
-from .models import StateUpdatedEvent, SystemState
-from .systems.faultlog import FaultLogEntry
+from .models import (
+    DemandState,
+    DhwState,
+    HvacState,
+    StateUpdatedEvent,
+    SystemState,
+    TemperatureState,
+    ZoneState,
+)
+from .systems.faultlog import FaultLog, FaultLogEntry
 from .systems.zones import DhwZone
 from .topology_builder import update_topology_schema_state
 
 if TYPE_CHECKING:
     from .gateway import Gateway
+    from .interfaces import DeviceRegistryInterface
+    from .systems.tcs import SystemBase
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -101,32 +113,32 @@ class StateProjectorRegistry:
     def __init__(self) -> None:
         """Initialize the state projector registry."""
         self._handlers: dict[
-            Code, list[Callable[[Any, dict[str, Any], Message], None]]
+            Code, list[Callable[[Entity | FaultLog, SchemaT, Message], None]]
         ] = {}
 
     def register(
         self,
         code: Code,
-        handler: Callable[[Any, dict[str, Any], Message], None],
+        handler: Callable[[Entity | FaultLog, SchemaT, Message], None],
     ) -> None:
         """Register an updater handler for a specific opcode.
 
         :param code: The packet opcode to handle.
         :type code: Code
         :param handler: The updater function to invoke.
-        :type handler: Callable[[Any, dict[str, Any], Message], None]
+        :type handler: Callable[[Entity | FaultLog, SchemaT, Message], None]
         """
         self._handlers.setdefault(code, []).append(handler)
 
     def get_handlers(
         self, code: Code
-    ) -> list[Callable[[Any, dict[str, Any], Message], None]]:
+    ) -> list[Callable[[Entity | FaultLog, SchemaT, Message], None]]:
         """Retrieve registered handlers for an opcode.
 
         :param code: The packet opcode to look up.
         :type code: Code
         :return: List of updater callables for the opcode.
-        :rtype: list[Callable[[Any, dict[str, Any], Message], None]]
+        :rtype: list[Callable[[Entity | FaultLog, SchemaT, Message], None]]
         """
         return self._handlers.get(code, [])
 
@@ -173,7 +185,9 @@ _DHW_OPCODES: Final[frozenset[Code | str]] = frozenset(
 )
 
 
-def _get_dhw_zone_from_msg(msg: Message, source_device: Any) -> DhwZone | None:
+def _get_dhw_zone_from_msg(
+    msg: Message, source_device: Device | None
+) -> DhwZone | None:
     """Resolve the DhwZone that should ingest a DHW opcode (1260/10A0/1F41).
 
     These payloads carry no ``zone_index``/``domain_id``, so standard target
@@ -223,8 +237,8 @@ def _get_dhw_zone_from_msg(msg: Message, source_device: Any) -> DhwZone | None:
 
 
 def _resolve_logical_targets(
-    gateway: Gateway, msg: Message, p: dict[str, Any]
-) -> list[Any]:
+    gateway: Gateway, msg: Message, p: SchemaT
+) -> list[Entity | FaultLog]:
     """Resolve software twin entities targeted by a payload.
 
     :param gateway: Gateway instance with device registry.
@@ -232,11 +246,11 @@ def _resolve_logical_targets(
     :param msg: L7 Message envelope.
     :type msg: Message
     :param p: Parsed payload dictionary.
-    :type p: dict[str, Any]
+    :type p: SchemaT
     :return: List of target entity instances.
     :rtype: list[Any]
     """
-    targets: list[Any] = []
+    targets: list[Entity | FaultLog] = []
     registry = getattr(gateway, "device_registry", None)
     src_dev = registry.device_by_id.get(msg.src.id) if registry else None
     dst_dev = (
@@ -256,7 +270,9 @@ def _resolve_logical_targets(
     # 1. Fault logs strictly target the TCS (if it exists) or the source device
     if msg.code == Code._0418:
         if tcs:
-            targets.append(getattr(tcs, "faultlog", src_dev))
+            targets.append(
+                cast(Entity | FaultLog, getattr(tcs, "faultlog", src_dev))
+            )
         elif src_dev:
             targets.append(src_dev)
         return targets
@@ -383,8 +399,8 @@ def _resolve_logical_targets(
 
 
 def _zones_by_declared_sensor(
-    gateway: Gateway, registry: Any, src_id: str
-) -> list[Any]:
+    gateway: Gateway, registry: DeviceRegistryInterface | None, src_id: str
+) -> list[Entity]:
     """Return zones that declare ``src_id`` as their sensor in the schema.
 
     Zone bindings for controller-class devices (CTL/UFC/HGI) are refused by
@@ -399,7 +415,7 @@ def _zones_by_declared_sensor(
     :param src_id: The source device id of the inbound message.
     :return: Zones whose schema entry declares ``src_id`` as their sensor.
     """
-    zones: list[Any] = []
+    zones: list[Entity] = []
     schema = getattr(getattr(gateway, "config", None), "schema", None) or {}
     for tcs_id, traits in schema.items():
         zones_schema = (
@@ -421,7 +437,9 @@ def _zones_by_declared_sensor(
     return zones
 
 
-def _update_system_state(target: Any, p: dict[str, Any], msg: Message) -> None:
+def _update_system_state(
+    target: Entity | FaultLog, p: SchemaT, msg: Message
+) -> None:
     """Translate system configuration opcodes into SystemState.
 
     Handles 2E04 (system_mode), 0100 (language), 313F (datetime), and
@@ -430,15 +448,17 @@ def _update_system_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     :param target: Target entity (TCS/Evohome) to update.
     :type target: Any
     :param p: Parsed message payload dictionary.
-    :type p: dict[str, Any]
+    :type p: SchemaT
     :param msg: Immutable Message envelope.
     :type msg: Message
     """
-    system_state = getattr(target, "system_state", None)
+    system_state = cast(
+        SystemState | None, getattr(target, "system_state", None)
+    )
     if system_state is None or not dataclasses.is_dataclass(system_state):
         return
 
-    updates: dict[str, Any] = {}
+    updates: SchemaT = {}
     if msg.code == Code._0100:
         if SZ_LANGUAGE in p:
             updates[SZ_LANGUAGE] = p[SZ_LANGUAGE]
@@ -463,9 +483,9 @@ def _update_system_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     if dtm:
         updates["last_updated"] = dtm
 
-    current_state = target.system_state or SystemState()
+    current_state = cast("SystemBase", target).system_state or SystemState()
     new_state = dataclasses.replace(current_state, **updates)
-    target.system_state = new_state
+    cast("SystemBase", target).system_state = new_state
 
     event = StateUpdatedEvent(
         entity_id=getattr(target, "id", "unknown"),
@@ -477,7 +497,9 @@ def _update_system_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         target.apply_state_update(event)
 
 
-def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
+def _update_hvac_state(
+    target: Entity | FaultLog, p: SchemaT, msg: Message
+) -> None:
     """Translate HVAC ventilation payloads into a frozen HvacState.
 
     Handles 31D9/31DA/22F1/22F3/10D0/12A0/1298 and related opcodes,
@@ -487,7 +509,7 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     :param target: Target entity to update.
     :type target: Any
     :param p: Parsed payload dictionary.
-    :type p: dict[str, Any]
+    :type p: SchemaT
     :param msg: Message envelope.
     :type msg: Message
     """
@@ -501,7 +523,7 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     ):
         return
 
-    hvac_state = getattr(target, "hvac_state", None)
+    hvac_state = cast(HvacState | None, getattr(target, "hvac_state", None))
     if hvac_state is None or not dataclasses.is_dataclass(hvac_state):
         return
 
@@ -510,9 +532,7 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         if isinstance(target, DeviceBase)
         else None
     )
-    p = quirks.apply_hvac_quirks(
-        p, target.hvac_state, msg.code, strategy=strategy
-    )
+    p = quirks.apply_hvac_quirks(p, hvac_state, msg.code, strategy=strategy)
 
     # The parser names 22F1 modes via a mode_max heuristic, which
     # mis-decodes real Orcon remotes (e.g. VMN-15LF01 sends
@@ -572,7 +592,7 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         {SZ_INDOOR_HUMIDITY, SZ_OUTDOOR_HUMIDITY}
     )
 
-    updates: dict[str, Any] = {}
+    updates: SchemaT = {}
     for field_name in fields:
         if field_name not in p:
             continue
@@ -614,7 +634,7 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
             or p[SZ_REMAINING_PERCENT] is not None
         )
     ):
-        target._supports_10d0 = True
+        cast(HvacVentilator, target)._supports_10d0 = True
         _LOGGER.debug(
             "Device %s confirmed 10D0 Filter Change support", target.id
         )
@@ -643,8 +663,8 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     if SZ_FAN_MODE in updates and hasattr(target, "_last_fan_mode_dtm"):
         target._last_fan_mode_dtm = msg.dtm
 
-    new_state = dataclasses.replace(target.hvac_state, **updates)
-    target.hvac_state = new_state
+    new_state = dataclasses.replace(hvac_state, **updates)
+    cast(HvacVentilator, target).hvac_state = new_state
 
     event = StateUpdatedEvent(
         entity_id=getattr(target, "id", "unknown"),
@@ -656,7 +676,9 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         target.apply_state_update(event)
 
 
-def _update_dhw_state(target: Any, p: dict[str, Any], msg: Message) -> None:
+def _update_dhw_state(
+    target: Entity | FaultLog, p: SchemaT, msg: Message
+) -> None:
     """Translate DHW opcodes (10A0/1260/1F41) into the frozen DhwState.
 
     Hydrates the DhwZone's ``dhw_state`` read-model (setpoint/overrun/
@@ -666,17 +688,17 @@ def _update_dhw_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     :param target: Target entity to update.
     :type target: Any
     :param p: Parsed payload dictionary.
-    :type p: dict[str, Any]
+    :type p: SchemaT
     :param msg: Message envelope.
     :type msg: Message
     """
     if not hasattr(target, "dhw_state"):
         return
-    dhw_state = getattr(target, "dhw_state", None)
+    dhw_state = cast(DhwState | None, getattr(target, "dhw_state", None))
     if dhw_state is None or not dataclasses.is_dataclass(dhw_state):
         return
 
-    updates: dict[str, Any] = {}
+    updates: SchemaT = {}
     if msg.code == Code._10A0:
         if SZ_SETPOINT in p:
             updates[SZ_SETPOINT] = p[SZ_SETPOINT]
@@ -695,8 +717,8 @@ def _update_dhw_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     if not updates:
         return
 
-    new_state = dataclasses.replace(target.dhw_state, **updates)
-    target.dhw_state = new_state
+    new_state = dataclasses.replace(dhw_state, **updates)
+    cast(DhwZone, target).dhw_state = new_state
 
     event = StateUpdatedEvent(
         entity_id=target.id,
@@ -708,22 +730,24 @@ def _update_dhw_state(target: Any, p: dict[str, Any], msg: Message) -> None:
 
 
 def _update_temperature_state(
-    target: Any, p: dict[str, Any], msg: Message
+    target: Entity | FaultLog, p: SchemaT, msg: Message
 ) -> None:
     """Translate temperature data into a frozen StateUpdatedEvent.
 
     :param target: Target entity to update.
     :type target: Any
     :param p: Parsed payload dictionary.
-    :type p: dict[str, Any]
+    :type p: SchemaT
     :param msg: Message envelope.
     :type msg: Message
     """
-    temp_state = getattr(target, "temp_state", None)
+    temp_state = cast(
+        TemperatureState | None, getattr(target, "temp_state", None)
+    )
     if temp_state is None or not dataclasses.is_dataclass(temp_state):
         return
 
-    updates: dict[str, Any] = {}
+    updates: SchemaT = {}
 
     if SZ_TEMPERATURE in p:
         target_id = getattr(target, "id", str(target))
@@ -747,7 +771,7 @@ def _update_temperature_state(
     if not updates:
         return
 
-    new_state = dataclasses.replace(target.temp_state, **updates)
+    new_state = dataclasses.replace(temp_state, **updates)
     event = StateUpdatedEvent(
         entity_id=getattr(target, "id", "unknown"),
         state=new_state,
@@ -757,7 +781,9 @@ def _update_temperature_state(
     target.apply_state_update(event)
 
 
-def _update_zone_state(target: Any, p: dict[str, Any], msg: Message) -> None:
+def _update_zone_state(
+    target: Entity | FaultLog, p: SchemaT, msg: Message
+) -> None:
     """Translate zone configuration opcodes into ZoneState.
 
     Handles:
@@ -770,15 +796,15 @@ def _update_zone_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     :param target: Target zone entity to update.
     :type target: Any
     :param p: Parsed payload dictionary.
-    :type p: dict[str, Any]
+    :type p: SchemaT
     :param msg: Message envelope.
     :type msg: Message
     """
-    zone_state = getattr(target, "zone_state", None)
+    zone_state = cast(ZoneState | None, getattr(target, "zone_state", None))
     if zone_state is None or not dataclasses.is_dataclass(zone_state):
         return
 
-    updates: dict[str, Any] = {}
+    updates: SchemaT = {}
 
     if msg.code == Code._0004:
         if SZ_NAME in p:
@@ -814,7 +840,7 @@ def _update_zone_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     if not updates:
         return
 
-    new_state = dataclasses.replace(target.zone_state, **updates)
+    new_state = dataclasses.replace(zone_state, **updates)
     event = StateUpdatedEvent(
         entity_id=getattr(target, "id", "unknown"),
         state=new_state,
@@ -824,22 +850,26 @@ def _update_zone_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     target.apply_state_update(event)
 
 
-def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
+def _update_demand_state(
+    target: Entity | FaultLog, p: SchemaT, msg: Message
+) -> None:
     """Translate demand data into a frozen StateUpdatedEvent.
 
     :param target: Target entity to update.
     :type target: Any
     :param p: Parsed payload dictionary.
-    :type p: dict[str, Any]
+    :type p: SchemaT
     :param msg: Message envelope.
     :type msg: Message
     """
-    demand_state = getattr(target, "demand_state", None)
+    demand_state = cast(
+        DemandState | None, getattr(target, "demand_state", None)
+    )
     if demand_state is None or not dataclasses.is_dataclass(demand_state):
         return
 
     slug = getattr(target, "_SLUG", "")
-    updates: dict[str, Any] = {}
+    updates: SchemaT = {}
 
     if SZ_HEAT_DEMAND in p:
         if slug in ("CTL", "UFC"):
@@ -877,7 +907,7 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     if not updates:
         return
 
-    new_state = dataclasses.replace(target.demand_state, **updates)
+    new_state = dataclasses.replace(demand_state, **updates)
     event = StateUpdatedEvent(
         entity_id=getattr(target, "id", "unknown"),
         state=new_state,
@@ -907,7 +937,7 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
 
 
 def _update_faultlog_state(
-    target: Any, p: dict[str, Any], msg: Message
+    target: Entity | FaultLog, p: SchemaT, msg: Message
 ) -> None:
     """Translate 0418 fault log data into a frozen StateUpdatedEvent.
 
@@ -917,13 +947,14 @@ def _update_faultlog_state(
     :param target: Target entity to update.
     :type target: Any
     :param p: Parsed payload dictionary.
-    :type p: dict[str, Any]
+    :type p: SchemaT
     :param msg: Message envelope.
     :type msg: Message
     """
-    if msg.code != Code._0418 or getattr(target, "state", None) is None:
+    fl_state = getattr(target, "state", None)
+    if msg.code != Code._0418 or fl_state is None:
         return
-    if type(target.state).__name__ != "FaultLogState":
+    if type(fl_state).__name__ != "FaultLogState":
         return
 
     # Guard: Ensure the entry index exists in the parsed payload
@@ -932,14 +963,14 @@ def _update_faultlog_state(
 
     try:
         entry = FaultLogEntry.from_msg(msg)
-        current_entries = getattr(target.state, "entries", ())
+        current_entries = getattr(fl_state, "entries", ())
         # Append to the immutable tuple, safely removing stale matching timestamps
         filtered = [
             e for e in current_entries if e.timestamp != entry.timestamp
         ]
         new_entries = tuple(filtered) + (entry,)
 
-        new_state = dataclasses.replace(target.state, entries=new_entries)
+        new_state = dataclasses.replace(fl_state, entries=new_entries)
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", "unknown"),
@@ -983,7 +1014,7 @@ def _route_2411_to_fan(gateway: Gateway, msg: Message) -> None:
     if registry is None:
         return
 
-    candidates: list[Any] = []
+    candidates: list[Entity | FaultLog] = []
     if msg.src is not None:
         src_dev = registry.device_by_id.get(msg.src.id)
         if src_dev is not None:
@@ -1013,14 +1044,14 @@ def _route_2411_to_fan(gateway: Gateway, msg: Message) -> None:
 
 
 def _update_schedule_state(
-    target: Any, p: dict[str, Any], msg: Message
+    target: Entity | FaultLog, p: SchemaT, msg: Message
 ) -> None:
     """Route 0006 version and 0404 fragment packets to Schedule read-models.
 
     :param target: Target entity.
     :type target: Any
     :param p: Parsed payload dictionary.
-    :type p: dict[str, Any]
+    :type p: SchemaT
     :param msg: Message envelope.
     :type msg: Message
     """

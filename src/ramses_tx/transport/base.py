@@ -110,7 +110,7 @@ class TransportConfig:
     log_all: bool = False
     use_regex: dict[str, dict[str, str]] = field(default_factory=dict)
     timeout: float | None = None
-    app_context: Any | None = None
+    app_context: object | None = None
     signature_policy: SignaturePolicy = SignaturePolicy.IMMEDIATE
     startup_grace: float | None = None
     enable_reconnect: bool = False
@@ -146,14 +146,14 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         /,
         *,
         config: TransportConfig,
-        extra: dict[str, Any] | None = None,
+        extra: dict[str, object] | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize the read-only transport."""
         _BaseTransport.__init__(self)
 
         self._loop = loop or asyncio.get_event_loop()
-        self._extra: dict[str, Any] = {} if extra is None else extra
+        self._extra: dict[str, object] = {} if extra is None else extra
 
         self._evofw_flag = config.evofw_flag
 
@@ -181,7 +181,9 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         """The asyncio event loop as declared by SerialTransport."""
         return self._loop
 
-    def get_extra_info(self, name: str, default: Any = None) -> Any:
+    def get_extra_info(  # type: ignore[explicit-any]  # heterogeneous channel
+        self, name: str, default: Any = None
+    ) -> Any:
         """Get extra information about the transport."""
         if name == SZ_IS_EVOFW3:
             return not self._is_hgi80
@@ -392,7 +394,7 @@ class _FullTransport(_ReadTransport):
         /,
         *,
         config: TransportConfig,
-        extra: dict[str, Any] | None = None,
+        extra: dict[str, object] | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize the bidirectional transport."""
@@ -411,7 +413,9 @@ class _FullTransport(_ReadTransport):
         """Get a precise datetime, using the current dtm."""
         return dt_now()
 
-    def get_extra_info(self, name: str, default: Any = None) -> Any:
+    def get_extra_info(  # type: ignore[explicit-any]  # heterogeneous channel
+        self, name: str, default: Any = None
+    ) -> Any:
         """Get extra info, including transmit rate calculations."""
         if name == "tx_rate":
             return self._report_transmit_rate()

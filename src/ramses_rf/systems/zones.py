@@ -57,7 +57,7 @@ from ramses_rf.schemas import (
     SZ_HTG_VALVE,
 )
 from ramses_rf.topology import Child, Parent
-from ramses_rf.typing import DeviceIdT, DevIndexT, WeeklySchedule
+from ramses_rf.typing import DeviceIdT, DevIndexT, SchemaT, WeeklySchedule
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 from ramses_tx.typing import PayDictT
 
@@ -126,7 +126,7 @@ class ZoneBase(Child, Parent[Device], Entity):
 
     # Should be a private method
     @classmethod
-    def create_from_schema(
+    def create_from_schema(  # type: ignore[explicit-any]  # schema-tree kwargs
         cls, tcs: _MultiZoneT | _StoredHwT, zone_index: str, **schema: Any
     ) -> Self:
         """Create a CH/DHW zone for a TCS and set its schema attrs.
@@ -139,7 +139,9 @@ class ZoneBase(Child, Parent[Device], Entity):
         zon._update_schema(**schema)
         return zon
 
-    def _update_schema(self, **schema: Any) -> None:
+    def _update_schema(  # type: ignore[explicit-any]  # schema-tree kwargs
+        self, **schema: Any
+    ) -> None:
         raise NotImplementedError
 
     def __repr__(self) -> str:
@@ -161,15 +163,15 @@ class ZoneBase(Child, Parent[Device], Entity):
         """
         return self._child_id
 
-    async def schema(self) -> dict[str, Any]:
+    async def schema(self) -> SchemaT:
         """Return the schema (fixed at instantiation)."""
         return {}
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return configuration (can be changed by user)."""
         return {}
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the current state."""
         return {}
 
@@ -207,7 +209,9 @@ class ZoneBase(Child, Parent[Device], Entity):
 class ZoneSchedule(ZoneBase):  # 0404
     """Zone mixin providing schedule retrieval and modification."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(  # type: ignore[explicit-any]  # passthrough to super
+        self, *args: Any, **kwargs: Any
+    ) -> None:
         """Initialize a ZoneSchedule instance."""
         super().__init__(*args, **kwargs)
 
@@ -220,7 +224,7 @@ class ZoneSchedule(ZoneBase):  # 0404
         await self._schedule.get_schedule(force_io=force_io)
         return self.schedule
 
-    async def set_schedule(
+    async def set_schedule(  # type: ignore[explicit-any]  # heterogeneous schedule dict
         self, schedule: WeeklySchedule | Mapping[str, Any]
     ) -> WeeklySchedule | None:
         """Upload a weekly schedule to the controller.
@@ -245,7 +249,7 @@ class ZoneSchedule(ZoneBase):  # 0404
         """Return version number of latest retrieved schedule."""
         return self._schedule.version
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the zone schedule status dictionary."""
         return {
             **(await super().status()),
@@ -282,7 +286,9 @@ class DhwZone(ZoneSchedule):  # CS92A
         self._dhw_valve: BdrSwitch | None = None
         self._htg_valve: BdrSwitch | None = None
 
-    def _update_schema(self, **schema: Any) -> None:
+    def _update_schema(  # type: ignore[explicit-any]  # schema-tree kwargs
+        self, **schema: Any
+    ) -> None:
         """Update a DHW zone with new schema attrs.
 
         Raise an exception if the new schema is not a superset of the
@@ -360,7 +366,7 @@ class DhwZone(ZoneSchedule):  # CS92A
         """Return the standard DHW zone name."""
         return "Stored HW"
 
-    async def config(self) -> dict[str, Any] | None:  # 10A0
+    async def config(self) -> SchemaT | None:  # 10A0
         """Return DHW configuration dictionary."""
         if self.dhw_state.setpoint is None:
             return None
@@ -370,7 +376,7 @@ class DhwZone(ZoneSchedule):  # CS92A
             "differential": self.dhw_state.differential,
         }
 
-    async def mode(self) -> dict[str, Any] | None:  # 1F41
+    async def mode(self) -> SchemaT | None:  # 1F41
         """Return DHW operating mode dictionary."""
         if self.dhw_state.mode is None:
             return None
@@ -488,7 +494,7 @@ class DhwZone(ZoneSchedule):  # CS92A
         """Reset the DHW parameters to their default values."""
         return await self.set_config(setpoint=50, overrun=5, differential=1)
 
-    async def schema(self) -> dict[str, Any]:
+    async def schema(self) -> SchemaT:
         """Return the schema of the DHW's."""
         return {
             SZ_SENSOR: self.sensor.id if self.sensor else None,
@@ -500,14 +506,14 @@ class DhwZone(ZoneSchedule):  # CS92A
             ),
         }
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return the DHW's configuration (excl. schedule)."""
         return {
             "config": await self.config(),
             "mode": await self.mode(),
         }
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the DHW's current state."""
         return {
             SZ_TEMPERATURE: await self.temperature(),
@@ -553,7 +559,9 @@ class Zone(ZoneSchedule):
         self.actuator_by_id: dict[DeviceIdT, Device] = {}
         self._heating_type: str | None = None
 
-    def _update_schema(self, **schema: Any) -> None:
+    def _update_schema(  # type: ignore[explicit-any]  # schema-tree kwargs
+        self, **schema: Any
+    ) -> None:
         """Update a heating zone with new schema attrs.
 
         Raise an exception if the new schema is not a superset of the
@@ -718,7 +726,7 @@ class Zone(ZoneSchedule):
         """
         return self.zone_state.name or self._name
 
-    async def config(self) -> dict[str, Any] | None:  # 000A
+    async def config(self) -> SchemaT | None:  # 000A
         """Return zone configuration dictionary."""
         if self.zone_state.min_temp is None:
             return None
@@ -730,7 +738,7 @@ class Zone(ZoneSchedule):
             "multiroom_mode": self.zone_state.multiroom_mode,
         }
 
-    async def mode(self) -> dict[str, Any] | None:  # 2349
+    async def mode(self) -> SchemaT | None:  # 2349
         """Return zone operating mode dictionary."""
         if self.zone_state.mode is None:
             return None
@@ -745,7 +753,7 @@ class Zone(ZoneSchedule):
         # 2309 (2349 is a superset of 2309)
         return self.temp_state.setpoint
 
-    async def setpoint_bounds(self) -> dict[str, Any] | None:  # 22C9, 2209
+    async def setpoint_bounds(self) -> SchemaT | None:  # 22C9, 2209
         """Return zone setpoint bounds if defined by thermostat."""
         result = await self.entity_state.get_value(
             (Code._22C9, Code._2209), zone_index=self.index
@@ -897,7 +905,7 @@ class Zone(ZoneSchedule):
             },
         )
 
-    async def schema(self) -> dict[str, Any]:
+    async def schema(self) -> SchemaT:
         """Return the schema of the zone (type, devices)."""
         return {
             f"_{SZ_NAME}": await self.name(),
@@ -906,7 +914,7 @@ class Zone(ZoneSchedule):
             SZ_ACTUATORS: sorted([d.id for d in self.actuators]),
         }
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return the zone's configuration (excl. schedule)."""
         return {
             "config": await self.config(),
@@ -915,7 +923,7 @@ class Zone(ZoneSchedule):
             "setpoint_bounds": await self.setpoint_bounds(),
         }
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the zone's current state."""
         return {
             SZ_SETPOINT: await self.setpoint(),
@@ -960,7 +968,7 @@ class EleZone(Zone):  # BDR91A/T  # TODO: 0008/0009/3150
         """Return the electric relay demand percentage (0.0 to 1.0)."""
         return self.demand_state.relay_demand
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the current zone operating status dictionary."""
         return {
             **(await super().status()),
@@ -984,7 +992,7 @@ class MixZone(Zone):  # HM80  # TODO: 0008/0009/3150
         """Return the mixing valve configuration (1030) or None."""
         return await self.entity_state.get_value(Code._1030)
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return zone parameters including mixing configuration."""
         return {
             **(await super().params()),
@@ -1096,7 +1104,7 @@ ZONE_CLASS_BY_SLUG: dict[str, type[DhwZone] | type[Zone]] = class_by_attr(
 )
 
 
-def zone_factory(
+def zone_factory(  # type: ignore[explicit-any]  # schema-tree kwargs
     tcs: _StoredHwT | _MultiZoneT,
     zone_index: str,
     *,
@@ -1105,7 +1113,7 @@ def zone_factory(
 ) -> DhwZone | Zone:
     """Return zone class for given zone_index and schema."""
 
-    def best_zon_class(
+    def best_zon_class(  # type: ignore[explicit-any]  # schema-tree kwargs
         controller_address: Address,
         zone_index: str,
         *,

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any
 
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
@@ -17,6 +16,7 @@ from ramses_rf.pipeline.topology_handlers import (
     TopologyHandler,
     UfhTopologyHandler,
 )
+from ramses_rf.typing import SchemaT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,8 +49,7 @@ class TopologyBuilder:
         self,
         emit_event_cb: Callable[[TopologyChangedEvent], None],
         enable_eavesdrop: bool = False,
-        device_class_lookup_cb: Callable[[str], dict[str, Any] | None]
-        | None = None,
+        device_class_lookup_cb: Callable[[str], SchemaT | None] | None = None,
     ) -> None:
         """Initialize the TopologyBuilder.
 
@@ -64,7 +63,7 @@ class TopologyBuilder:
             current device traits (dict with "class", "locked", etc.)
             by device_id.  Passed to handlers that need it for
             contradiction detection.
-        :type device_class_lookup_cb: Callable[[str], dict[str, Any] | None] | None
+        :type device_class_lookup_cb: Callable[[str], SchemaT | None] | None
         :returns: None
         :rtype: None
         """

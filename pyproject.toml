@@ -181,7 +181,7 @@ zigbee = ["zigpy>=2.0.0"]           # ZigbeeTransport (Phase 3) — provided by 
   disallow_untyped_decorators = true  # from: Untyped definitions and calls
   disallow_any_generics = true
 
-  # disallow_any_explicit = true  # TODO: added by zxdavb
+  disallow_any_explicit = true  # TODO: extend to ramses_rf/ramses_cli (see override below)
 
   # # Untyped definitions and calls
   #  - https://mypy.readthedocs.io/en/stable/command_line.html#untyped-definitions-and-calls
@@ -226,9 +226,10 @@ zigbee = ["zigpy>=2.0.0"]           # ZigbeeTransport (Phase 3) — provided by 
   ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-  module = "ramses_tx.transport.zigbee"
+  module = "ramses_tx.transport.zigbee.*"
   disable_error_code = [
     "unreachable",  # conditional imports inside try blocks
+    "explicit-any",  # boundary shim around untyped zigpy/ZHA/HA objects
   ]
 
 [[tool.mypy.overrides]]
@@ -241,14 +242,17 @@ zigbee = ["zigpy>=2.0.0"]           # ZigbeeTransport (Phase 3) — provided by 
   module = "tests_rf.*"
 
   disable_error_code = [
+    "explicit-any",  #  mocks/fixtures legitimately carry Any
     "arg-type",  #     54
     "type-arg",  #     11
+    "attr-defined",  #  duck-typed state/event attributes in fixtures
   ]
 
 [[tool.mypy.overrides]]
   module = "tests_tx.*"
 
   disable_error_code = [
+    "explicit-any",   #  mocks/fixtures legitimately carry Any
     "attr-defined",   #  MagicMock assertions on typed callables
     "method-assign",  #  assigning MagicMock to methods in tests
     "assignment",     #  assigning MagicMock to None-typed fields
@@ -261,12 +265,15 @@ zigbee = ["zigpy>=2.0.0"]           # ZigbeeTransport (Phase 3) — provided by 
 
 [[tool.mypy.overrides]]
   module = [
-    "ramses_cli.*",
-    "ramses_rf.*",
+    "tests_cli.*",
+    "utils.*",
+    "wip.*",
   ]
 
-  disallow_any_explicit = false
-
+  disable_error_code = [
+    "explicit-any",  #  mocks/fixtures legitimately carry Any
+    "arg-type",      #  plain strs for NewType'd ids in test calls
+  ]
 
 #
 ## ruff ##############################################################################

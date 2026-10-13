@@ -7,10 +7,16 @@ import asyncio
 import functools
 import json
 import logging
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Final
+from collections.abc import Callable, Coroutine
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Concatenate,
+    Final,
+    cast,
+)
 
-from ramses_rf import exceptions as exc
+from ramses_rf import Gateway, exceptions as exc
 from ramses_rf.address import HGI_DEV_ADDR, Address
 from ramses_rf.commands.core import Command as Intent
 from ramses_rf.const import (
@@ -32,8 +38,6 @@ from ramses_tx.address import NON_DEV_ADDR
 from ramses_tx.const import RQ, W_, Code
 
 if TYPE_CHECKING:
-    from ramses_rf import Gateway
-    from ramses_rf.devices import Controller
     from ramses_tx import IndexT
 
 
@@ -65,7 +69,7 @@ def _send_probe_dto(
     )
     task = gateway._engine._loop.create_task(coro)
 
-    def _clear_exc(fut: asyncio.Task[Any]) -> None:
+    def _clear_exc(fut: asyncio.Task[Packet]) -> None:
         if not fut.cancelled() and fut.exception():
             _LOGGER.debug(
                 "Background discovery task failed: %s", fut.exception()
@@ -76,7 +80,9 @@ def _send_probe_dto(
     return task
 
 
-def script_decorator(fnc: Callable[..., Any]) -> Callable[..., Any]:
+def script_decorator[**P](
+    fnc: Callable[Concatenate[Gateway, P], Coroutine[object, object, None]],
+) -> Callable[Concatenate[Gateway, P], Coroutine[object, object, None]]:
     """Decorate a script to broadcast 'Script begins:' and 'Script done.' messages.
 
     :param fnc: The asynchronous script function to decorate.
@@ -84,7 +90,9 @@ def script_decorator(fnc: Callable[..., Any]) -> Callable[..., Any]:
     """
 
     @functools.wraps(fnc)
-    async def wrapper(gateway: Gateway, *args: Any, **kwargs: Any) -> None:
+    async def wrapper(
+        gateway: Gateway, *args: P.args, **kwargs: P.kwargs
+    ) -> None:
         start_intent = Intent(
             src=HGI_DEV_ADDR,
             dst=HGI_DEV_ADDR,
@@ -107,10 +115,17 @@ def script_decorator(fnc: Callable[..., Any]) -> Callable[..., Any]:
             finish_intent, priority=Priority.LOWEST
         )
 
-    return wrapper
+    # functools.wraps preserves the signature at runtime; mypy cannot see it
+    return cast(
+        Callable[Concatenate[Gateway, P], Coroutine[object, object, None]],
+        wrapper,
+    )
 
 
-def spawn_scripts(gateway: Gateway, **kwargs: Any) -> list[asyncio.Task[None]]:
+def spawn_scripts(  # type: ignore[explicit-any]  # heterogeneous CLI kwarg bag
+    gateway: Gateway,
+    **kwargs: Any,
+) -> list[asyncio.Task[None]]:
     """Spawn discovery or execution tasks based on provided CLI keyword arguments.
 
     :param gateway: The main gateway instance handling transport and device
@@ -157,7 +172,10 @@ def spawn_scripts(gateway: Gateway, **kwargs: Any) -> list[asyncio.Task[None]]:
     return tasks
 
 
-async def exec_cmd(gateway: Gateway, **kwargs: Any) -> None:
+async def exec_cmd(  # type: ignore[explicit-any]  # heterogeneous CLI kwarg bag
+    gateway: Gateway,
+    **kwargs: Any,
+) -> None:
     """Execute a single raw command string from the CLI arguments.
 
     :param gateway: The gateway instance.
@@ -216,8 +234,10 @@ async def get_schedule(
         _LOGGER.error("get_schedule(): Function timed out: %s", err)
 
 
-async def set_schedule(
-    gateway: Gateway, controller_id: DeviceIdT, schedule_input: str | Any
+async def set_schedule(  # type: ignore[explicit-any]  # str | file-like | parsed
+    gateway: Gateway,
+    controller_id: DeviceIdT,
+    schedule_input: str | Any,
 ) -> None:
     """Set the zone schedule for a specific zone under a controller via JSON payload.
 
@@ -420,29 +440,19 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                     ),
                 )
 
-        elif code == Code._0404:  # FIXME
-            intent1 = Intent(
-                src=HGI_DEV_ADDR,
-                dst=Address(device_id),
-                action=Action.GET_SCHEDULE_FRAGMENT,
-                data={
-                    SZ_ZONE_INDEX: HW,
-                    SZ_FRAGMENT_NUMBER: 1,
-                    SZ_TOTAL_FRAGMENTS: 0,
-                },
-            )
-            gateway.dispatcher.send_background(intent1)
-            intent2 = Intent(
-                src=HGI_DEV_ADDR,
-                dst=Address(device_id),
-                action=Action.GET_SCHEDULE_FRAGMENT,
-                data={
-                    SZ_ZONE_INDEX: "00",
-                    SZ_FRAGMENT_NUMBER: 1,
-                    SZ_TOTAL_FRAGMENTS: 0,
-                },
-            )
-            gateway.dispatcher.send_background(intent2)
+        elif code == Code._0404:
+            for zone_idx in (HW, *(f"{i:02X}" for i in range(16))):
+                intent = Intent(
+                    src=HGI_DEV_ADDR,
+                    dst=Address(device_id),
+                    action=Action.GET_SCHEDULE_FRAGMENT,
+                    data={
+                        SZ_ZONE_INDEX: zone_idx,
+                        SZ_FRAGMENT_NUMBER: 1,
+                        SZ_TOTAL_FRAGMENTS: 0,
+                    },
+                )
+                gateway.dispatcher.send_background(intent)
 
         elif code == Code._0418:
             for log_index in range(2):

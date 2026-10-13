@@ -85,7 +85,7 @@ async def test_topology_builder_snapshot(
 
     await drain_cqrs_queues(async_gwy)
 
-    raw_schema = await async_gwy.device_registry.generate_schema()  # type: ignore[attr-defined]
+    raw_schema = await async_gwy.device_registry.generate_schema()
 
     await async_gwy.stop()
 

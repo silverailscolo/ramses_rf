@@ -14,7 +14,7 @@ for both HEAT and HVAC.
 
 from __future__ import annotations
 
-from typing import Any, Final
+from typing import Final
 
 from ramses_tx.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
@@ -24,6 +24,8 @@ from ramses_tx.const import (  # noqa: F401, isort: skip, pylint: disable=unused
     Code,
     Verb,
 )
+
+from ramses_rf.typing import PayloadT, SchemaT
 
 from ..enums import DevType
 
@@ -355,7 +357,7 @@ CODE_INDEX_DOMAIN: dict[Code, str] = {
 ########################################################################################
 # CODES_BY_DEV_SLUG - HEAT (CH/DHW) vs HVAC (ventilation)
 # TODO: 34: can 3220 - split out RND from THM/STA
-_DEV_KLASSES_HEAT: dict[str, dict[Code, dict[Verb, Any]]] = {
+_DEV_KLASSES_HEAT: dict[str, dict[Code, dict[Verb, PayloadT | set[str]]]] = {
     DevType.RFG: {  # RFG100: RF to Internet gateway (and others)
         Code._0002: {RQ: {}},
         Code._0004: {I_: {}, RQ: {}},
@@ -644,7 +646,7 @@ _DEV_KLASSES_HEAT: dict[str, dict[Code, dict[Verb, Any]]] = {
     # },
 }
 # TODO: add 1FC9 everywhere?
-_DEV_KLASSES_HVAC: dict[str, dict[Code, dict[Verb, Any]]] = {
+_DEV_KLASSES_HVAC: dict[str, dict[Code, dict[Verb, PayloadT | set[str]]]] = {
     DevType.DIS: {  # Orcon RF15 Display: a superset of a REM
         Code._0001: {RQ: {}},
         Code._042F: {I_: {}},
@@ -804,7 +806,7 @@ VMI_WRITE_CODES: frozenset[Code] = frozenset(
 # disqualify the pure-display (DIS) signature.
 HOUSEKEEPING_REPLY_CODES: frozenset[Code] = frozenset({Code._10E0})
 
-CODES_BY_DEV_SLUG: dict[str, dict[Code, dict[Verb, Any]]] = {
+CODES_BY_DEV_SLUG: dict[str, dict[Code, dict[Verb, PayloadT | set[str]]]] = {
     DevType.HGI: {  # HGI80: RF to (USB) serial gateway interface
         Code._PUZZ: {I_: {}, RQ: {}, W_: {}},
     },  # HGI80s can do what they like
@@ -956,7 +958,7 @@ _22F1_SCHEMES: dict[str, dict[str, str]] = {
 }
 
 # unclear if true for only Orcon/*all* models
-_2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
+_2411_PARAMS_SCHEMA: dict[str, SchemaT] = {
     "01": {  # all?
         SZ_DESCRIPTION: "Support",
         SZ_MIN_VALUE: 0xFF,  # None?
