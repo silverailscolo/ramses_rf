@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
+from typing import Protocol
 
 from ramses_rf.address import Address
 from ramses_rf.commands.core import Command as Intent
@@ -11,6 +11,7 @@ from ramses_rf.enums import Action
 from ramses_rf.exceptions import DeviceNotFaked
 from ramses_rf.interfaces import GatewayInterface
 from ramses_rf.messages import Message
+from ramses_rf.typing import SchemaT
 from ramses_tx import CommandDTO, Priority
 from ramses_tx.address import HGI_DEV_ADDR, NON_DEV_ADDR
 from ramses_tx.const import RQ
@@ -32,7 +33,7 @@ _LOGGER = logging.getLogger(__name__)
 async def send_fake_intent(
     device: _FakeableDevice,
     action: Action,
-    data: dict[str, Any],
+    data: SchemaT,
     *,
     priority: Priority | None = Priority.HIGH,
     wait_for_reply: bool | None = None,

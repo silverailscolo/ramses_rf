@@ -15,6 +15,7 @@ from datetime import UTC, datetime as dt
 from typing import TYPE_CHECKING, Any, Literal, overload
 
 from ramses_rf.const import SZ_DHW_INDEX, SZ_DOMAIN_INDEX, SZ_ZONE_INDEX
+from ramses_rf.typing import SchemaT
 from ramses_tx.address import ALL_DEVICE_ID
 
 # noqa: F401, isort: skip, pylint: disable=unused-import
@@ -56,7 +57,7 @@ class StateCache:
         return self._cache.get(header)
 
     def get_by_routing_key(
-        self, code: Code | str, verb: Verb | str, context: Any
+        self, code: Code | str, verb: Verb | str, context: str | bool | None
     ) -> Message | None:
         """Fallback O(N) lookup when source_id is unknown."""
         context_str = RoutingContext(context).as_string
@@ -79,7 +80,7 @@ class StateCache:
 
     def get_records(
         self,
-    ) -> list[tuple[Code | str, Verb | str, Any, Message]]:
+    ) -> list[tuple[Code | str, Verb | str, str | bool | None, Message]]:
         """Retrieve all cache records as tuples of (code, verb, ctx, msg)."""
         return [
             (h.code, h.verb, h.context.value, m)
@@ -109,7 +110,7 @@ class EntityState:
 
         # Tracks DB tasks to maintain Message object immutability
         self._pending_deletes: set[StateHeader] = set()
-        self._delete_tasks: set[asyncio.Task[Any]] = set()
+        self._delete_tasks: set[asyncio.Task[object]] = set()
 
     def _sync_state(self) -> None:
         """Hybrid Push Model: Sync O(1) cache using cursor on global log."""
@@ -223,7 +224,7 @@ class EntityState:
         cache = await self._build_state_cache()
         return cache.get_all()
 
-    def get_cached_value(
+    def get_cached_value(  # type: ignore[explicit-any]  # heterogeneous payload value
         self,
         code: Code | str,
         key: str | None = "*",
@@ -349,60 +350,60 @@ class EntityState:
     async def get_value(
         self,
         code: Literal[Code._3150] | Literal[Code._0008],
-        *args: Any,
-        **kwargs: Any,
+        *args: object,
+        **kwargs: object,
     ) -> float | None: ...
     @overload
     async def get_value(
         self,
         code: Literal[Code._1030],
-        *args: Any,
-        **kwargs: Any,
+        *args: object,
+        **kwargs: object,
     ) -> PayDictT._1030 | None: ...
     @overload
-    async def get_value(
+    async def get_value(  # type: ignore[explicit-any]  # heterogeneous payload value
         self,
         code: Literal[Code._10E0] | Literal[Code._1060],
-        *args: Any,
-        **kwargs: Any,
+        *args: object,
+        **kwargs: object,
     ) -> Any: ...
     @overload
     async def get_value(
         self,
         code: Literal[Code._0006],
-        *args: Any,
-        **kwargs: Any,
+        *args: object,
+        **kwargs: object,
     ) -> int | None: ...
     @overload
     async def get_value(
         self,
         code: Literal[Code._1100],
-        *args: Any,
-        **kwargs: Any,
+        *args: object,
+        **kwargs: object,
     ) -> PayDictT._1100 | None: ...
     @overload
     async def get_value(
         self,
         code: Literal[Code._10A0],
-        *args: Any,
-        **kwargs: Any,
+        *args: object,
+        **kwargs: object,
     ) -> PayDictT._10A0 | None: ...
     @overload
     async def get_value(
         self,
         code: Literal[Code._1F09],
-        *args: Any,
+        *args: object,
         key: str | None = None,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> PayDictT._1F09 | int | float | None: ...
     @overload
-    async def get_value(
+    async def get_value(  # type: ignore[explicit-any]  # heterogeneous payload value
         self,
         code: Code | str | tuple[Code | str, ...] | Message,
-        *args: Any,
-        **kwargs: Any,
+        *args: object,
+        **kwargs: object,
     ) -> Any: ...
-    async def get_value(
+    async def get_value(  # type: ignore[explicit-any]  # heterogeneous passthrough
         self,
         code: Code | str | tuple[Code | str, ...] | Message,
         *args: Any,
@@ -417,7 +418,7 @@ class EntityState:
 
     _msg_value = get_value
 
-    async def _msg_value_code(
+    async def _msg_value_code(  # type: ignore[explicit-any]  # heterogeneous passthrough
         self,
         code: Code | str | tuple[Code | str, ...],
         verb: Verb | str | None = None,
@@ -484,7 +485,7 @@ class EntityState:
 
         return self._msg_value_msg(msg, key=key, **kwargs)
 
-    def _msg_value_msg(
+    def _msg_value_msg(  # type: ignore[explicit-any]  # heterogeneous payload value
         self,
         msg: Message | None,
         key: str | None = "*",
@@ -524,7 +525,7 @@ class EntityState:
         elif zone_index:
             filter_index, filter_val = SZ_ZONE_INDEX, zone_index
 
-        def _matches_filter(d: dict[str, Any]) -> bool:
+        def _matches_filter(d: SchemaT) -> bool:
             if not filter_index:
                 return True
             val = d.get(filter_index)
@@ -648,7 +649,7 @@ class EntityState:
         self,
         code: Code | str | tuple[Code | str, ...] | None = None,
         key: str | None = None,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> Code | str | None:
         """Retrieve the most current Code involving this device."""
         latest: dt = dt.min.replace(tzinfo=UTC)
@@ -746,7 +747,7 @@ class EntityState:
 
     _msg_qry_by_code_key = find_latest_code
 
-    async def _msg_qry(self, sql: str) -> list[dict[str, Any]]:
+    async def _msg_qry(self, sql: str) -> list[SchemaT]:
         """Query an entity's stored payloads."""
         _LOGGER.warning("Legacy _msg_qry (SQL) called. Returning empty.")
         return []
@@ -778,7 +779,7 @@ class EntityState:
 
         return cache
 
-    async def traits(self) -> dict[str, Any]:
+    async def traits(self) -> SchemaT:
         """Get the codes seen by the entity."""
         msgs_dict = await self.get_message_log_flat()
 

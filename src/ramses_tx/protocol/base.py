@@ -13,9 +13,9 @@ import dataclasses
 import logging
 import re
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from datetime import datetime as dt, timedelta as td
-from typing import Any, Final
+from typing import Final, cast
 
 from ..address import ALL_DEV_ADDR, HGI_DEV_ADDR, NON_DEV_ADDR
 from ..const import (
@@ -75,7 +75,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         self._msg_handler = msg_handler
         self._msg_handlers: list[tuple[MsgHandlerT, MsgFilterT | None]] = []
         self._raw_packet_handlers: list[MsgHandlerT] = []
-        self._handler_tasks: set[asyncio.Task[Any]] = set()
+        self._handler_tasks: set[asyncio.Task[None]] = set()
 
         self._transport: TransportInterface | None = None
 
@@ -110,7 +110,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         self._outbound_regex: dict[str, str] = {}
         self._tracked_sync_cycles: deque[Packet] = deque(maxlen=3)
 
-    def _create_handler_task(self, coro: Any) -> None:
+    def _create_handler_task(self, coro: Coroutine[None, None, None]) -> None:
         """Create a fire-and-forget task for a message handler coroutine.
 
         The task is tracked in _handler_tasks so it can be cancelled in
@@ -202,7 +202,11 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         return del_handler
 
     def connection_made(
-        self, transport: Any, /, *, ramses: bool = False
+        self,
+        transport: asyncio.BaseTransport | TransportInterface,
+        /,
+        *,
+        ramses: bool = False,
     ) -> None:
         """Establish connection to the Transport.
 
@@ -214,17 +218,17 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         ``ProtocolInterface.connection_made`` but ignored here —
         ``PortTransport`` calls this directly after signature echo.
 
-        ``transport`` is typed ``Any`` to satisfy mypy's Liskov check
-        against ``asyncio.BaseProtocol.connection_made`` (which expects
-        ``BaseTransport``).  At runtime it is always a
-        ``TransportInterface``.
+        ``transport`` is typed ``BaseTransport`` to satisfy mypy's Liskov
+        check against ``asyncio.BaseProtocol.connection_made``.  At
+        runtime it is always a ``TransportInterface``.
         """
         if self._wait_connection_made.done():
             return
 
+        ramses_transport = cast(TransportInterface, transport)
         self._wait_connection_lost = self._loop.create_future()
-        self._wait_connection_made.set_result(transport)
-        self._transport = transport
+        self._wait_connection_made.set_result(ramses_transport)
+        self._transport = ramses_transport
 
     async def wait_for_connection_made(
         self, timeout: float = 1.0
@@ -448,21 +452,6 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
     ) -> Packet | None:  # only cmd, no args, kwargs
         raise NotImplementedError(f"{self}: Unexpected error")
 
-    async def _send_frame(
-        self, frame: str, num_repeats: int = 0, gap_duration: float = 0.0
-    ) -> None:
-        """Write to the transport."""
-        if self._transport is None:
-            raise ProtocolSendFailed("Transport is not connected")
-
-        # apply outbound regex
-        frame = self._apply_regex(frame, self._outbound_regex)
-
-        await self._transport.write_frame(frame)
-        for _ in range(num_repeats - 1):
-            await asyncio.sleep(gap_duration)
-            await self._transport.write_frame(frame)
-
     def packet_received(self, packet: Packet) -> None:
         """Wrap self._packet_received(packet).
 
@@ -513,6 +502,8 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
                 now_dtm = (
                     now.replace(tzinfo=None) if now.tzinfo is not None else now
                 )
+                if not isinstance(p.payload, str):
+                    return False
                 return bool(
                     p_dtm + td(seconds=int(p.payload[2:6], 16) / 10) > now_dtm
                 )

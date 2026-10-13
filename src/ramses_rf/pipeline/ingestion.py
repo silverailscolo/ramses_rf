@@ -11,7 +11,7 @@ import contextlib
 import dataclasses
 import logging
 import uuid
-from typing import Any, Final
+from typing import TYPE_CHECKING, Final, cast
 
 from ramses_rf import quirks
 from ramses_rf.address import HGI_DEV_ADDR, NON_DEV_ADDR, Address
@@ -164,6 +164,8 @@ from ramses_rf.const import (
     DevType,
 )
 from ramses_rf.devices.dev_base import DeviceBase
+from ramses_rf.devices.hvac_ventilators import HvacVentilator
+from ramses_rf.entity import Entity
 from ramses_rf.enums import Action, PumpRelayState
 from ramses_rf.messages import Message
 from ramses_rf.models import (
@@ -190,8 +192,17 @@ from ramses_rf.state_projector import (
     _get_dhw_zone_from_msg,
     _route_2411_to_fan,
 )
+from ramses_rf.typing import PayloadT
 from ramses_tx import Priority
-from ramses_tx.const import I_, RQ, Code
+from ramses_tx.const import I_, RQ, W_, Code
+
+if TYPE_CHECKING:
+    from ramses_rf.devices.dev_base import DeviceHeat
+    from ramses_rf.devices.heat_controllers import UfhController
+    from ramses_rf.devices.opentherm_bridge import OtbGateway
+    from ramses_rf.gateway import Gateway
+    from ramses_rf.systems.tcs import SystemBase
+    from ramses_rf.systems.zones import DhwZone, ZoneBase
 
 # --- Translation Maps (Static Constant Blocks) ---
 
@@ -240,7 +251,7 @@ class StateProjector:
     """Projector task that transforms incoming telemetry into immutable states."""
 
     def __init__(
-        self, gateway: Any, ssot_queue: asyncio.Queue[Message]
+        self, gateway: Gateway, ssot_queue: asyncio.Queue[Message]
     ) -> None:
         """Initialize the state projector background worker.
 
@@ -324,7 +335,7 @@ class StateProjector:
         # (issue 1039).  All array payloads now arrive as list[dict] with
         # the index key (zone_index, ufh_index, etc.) embedded in each
         # element by the dataclass's to_dict().
-        payloads: list[dict[str, Any]] = []
+        payloads: list[PayloadT] = []
         raw_payloads = (
             msg.payload if isinstance(msg.payload, list) else [msg.payload]
         )
@@ -425,8 +436,13 @@ class StateProjector:
                 ):
                     parent_sensor = getattr(parent, "sensor", None)
                     parent_actuators = getattr(parent, "actuators", [])
+                    # A declared-but-unbindable sensor (e.g. a CTL used as
+                    # room thermostat) must also block the sole-actuator
+                    # fallback (ramses-rf/ramses_cc#1328).
                     if src_dev is parent_sensor or (
                         parent_sensor is None
+                        and getattr(parent, "_declared_sensor_id", None)
+                        is None
                         and len(parent_actuators) == 1
                         and src_dev in parent_actuators
                     ):
@@ -534,8 +550,18 @@ class StateProjector:
                 Code._313F,
                 Code._2D49,
             ):
-                tcs_target = system_by_id.get(msg.src.id) or getattr(
-                    src_dev, "tcs", None
+                # A W/RQ echo is addressed to the CTL while src is the
+                # HGI, so resolve the TCS from the controller side (dst)
+                # too — else an echo for a secondary controller is
+                # dropped (multi-TCS schema).
+                # See: https://github.com/ramses-rf/ramses_rf/issues/1284
+                tcs_target = (
+                    system_by_id.get(msg.src.id)
+                    or getattr(src_dev, "tcs", None)
+                    or system_by_id.get(msg.dst.id)
+                    or getattr(
+                        registry.device_by_id.get(msg.dst.id), "tcs", None
+                    )
                 )
                 if tcs_target is None and len(systems) == 1:
                     tcs_target = systems[0]
@@ -591,7 +617,7 @@ class StateProjector:
                     )
 
     def _update_opentherm_state(
-        self, target: Any, payload: dict[str, Any], msg: Message
+        self, target: Entity, payload: PayloadT, msg: Message
     ) -> None:
         """Translate OpenTherm frames or parallel opcodes into OpenThermState."""
         current_state = getattr(target, "opentherm_state", None)
@@ -601,11 +627,11 @@ class StateProjector:
             else:
                 return
 
-        base_updates: dict[str, Any] = {}
-        flag_updates: dict[str, Any] = {}
-        fault_updates: dict[str, Any] = {}
-        temperature_updates: dict[str, Any] = {}
-        counter_updates: dict[str, Any] = {}
+        base_updates: PayloadT = {}
+        flag_updates: PayloadT = {}
+        fault_updates: PayloadT = {}
+        temperature_updates: PayloadT = {}
+        counter_updates: PayloadT = {}
 
         match msg.code:
             case Code._3220:
@@ -770,7 +796,7 @@ class StateProjector:
             counters=new_counters,
             **base_updates,
         )
-        target.opentherm_state = new_state
+        cast("OtbGateway", target).opentherm_state = new_state
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", SZ_UNKNOWN),
@@ -782,7 +808,7 @@ class StateProjector:
             target.apply_state_update(event)
 
     def _update_hvac_state(
-        self, target: Any, payload: dict[str, Any], msg: Message
+        self, target: Entity, payload: PayloadT, msg: Message
     ) -> None:
         """Translate complex multi-opcode ventilation payloads into HvacState.
 
@@ -832,7 +858,7 @@ class StateProjector:
                 if mapped is not None:
                     payload[SZ_FAN_MODE] = mapped
 
-        updates: dict[str, Any] = {}
+        updates: PayloadT = {}
 
         fields = [
             SZ_CO2_LEVEL,
@@ -898,6 +924,23 @@ class StateProjector:
                 continue
             updates[field_name] = field_val
 
+        # Flag filter_remaining support on device
+        if (
+            msg.code == Code._10D0
+            # a 10D0 RP is addressed to the *requester* — which may be an
+            # HGI/REM, not a fan; only devices that *declare* the flag get
+            # flagged (ramses_cc issue 1330)
+            and getattr(target, "_supports_10d0", None) is False
+            and (
+                payload[SZ_REMAINING_DAYS] is not None
+                or payload[SZ_REMAINING_PERCENT] is not None
+            )
+        ):
+            cast(HvacVentilator, target)._supports_10d0 = True
+            _LOGGER.debug(
+                "Device %s confirmed 10D0 Filter Change support", target.id
+            )
+
         # Handle non-standard names passed by the semantic parsers
         if SZ_REMAINING_DAYS in payload:
             updates[SZ_FILTER_REMAINING_DAYS] = payload[SZ_REMAINING_DAYS]
@@ -927,7 +970,7 @@ class StateProjector:
             updates[SZ_LAST_UPDATED] = dtm
 
         new_state = dataclasses.replace(current_state, **updates)
-        target.hvac_state = new_state
+        cast(HvacVentilator, target).hvac_state = new_state
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", SZ_UNKNOWN),
@@ -939,10 +982,10 @@ class StateProjector:
             target.apply_state_update(event)
 
     def _update_power_state(
-        self, target: Any, payload: dict[str, Any], msg: Message
+        self, target: Entity, payload: PayloadT, msg: Message
     ) -> None:
         """Translate battery opcodes into PowerState."""
-        updates: dict[str, Any] = {}
+        updates: PayloadT = {}
         if msg.code == Code._1060:
             if SZ_BATTERY_LOW in payload:
                 updates[SZ_BATTERY_LOW] = payload[SZ_BATTERY_LOW]
@@ -958,7 +1001,7 @@ class StateProjector:
 
         current_state = getattr(target, "power_state", None) or PowerState()
         new_state = dataclasses.replace(current_state, **updates)
-        target.power_state = new_state
+        cast(DeviceBase, target).power_state = new_state
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", SZ_UNKNOWN),
@@ -970,13 +1013,13 @@ class StateProjector:
             target.apply_state_update(event)
 
     def _update_dhw_state(
-        self, target: Any, payload: dict[str, Any], msg: Message
+        self, target: Entity, payload: PayloadT, msg: Message
     ) -> None:
         """Translate DHW opcodes into DhwState."""
         if msg.code not in (Code._10A0, Code._1260, Code._1F41):
             return
 
-        updates: dict[str, Any] = {}
+        updates: PayloadT = {}
         if msg.code == Code._10A0:
             if SZ_SETPOINT in payload:
                 updates[SZ_SETPOINT] = payload[SZ_SETPOINT]
@@ -1004,7 +1047,7 @@ class StateProjector:
 
         current_state = getattr(target, "dhw_state", None) or DhwState()
         new_state = dataclasses.replace(current_state, **updates)
-        target.dhw_state = new_state
+        cast("DhwZone", target).dhw_state = new_state
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", SZ_UNKNOWN),
@@ -1016,13 +1059,22 @@ class StateProjector:
             target.apply_state_update(event)
 
     def _update_system_state(
-        self, target: Any, payload: dict[str, Any], msg: Message
+        self, target: Entity, payload: PayloadT, msg: Message
     ) -> None:
         """Translate system configuration opcodes into SystemState."""
         if msg.code not in (Code._0100, Code._2E04, Code._313F, Code._2D49):
             return
 
-        updates: dict[str, Any] = {}
+        # A W 2E04 is our own command echo (HGI -> CTL): it carries the
+        # *requested* mode, not the controller's confirmed state.  When
+        # nothing changes (e.g. auto_with_reset while already in auto)
+        # the controller sends no I 2E04, so the echoed request would
+        # stick as phantom state (ramses_cc issue 1323).  Only project
+        # the controller's confirmed mode (I/RP).
+        if msg.code == Code._2E04 and msg.verb == W_:
+            return
+
+        updates: PayloadT = {}
         if msg.code == Code._0100:
             if SZ_LANGUAGE in payload:
                 updates[SZ_LANGUAGE] = payload[SZ_LANGUAGE]
@@ -1047,7 +1099,7 @@ class StateProjector:
 
         current_state = getattr(target, "system_state", None) or SystemState()
         new_state = dataclasses.replace(current_state, **updates)
-        target.system_state = new_state
+        cast("SystemBase", target).system_state = new_state
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", SZ_UNKNOWN),
@@ -1059,7 +1111,7 @@ class StateProjector:
             target.apply_state_update(event)
 
     def _update_temperature_state(
-        self, target: Any, payload: dict[str, Any], msg: Message
+        self, target: Entity, payload: PayloadT, msg: Message
     ) -> None:
         """Translate temperature/TRV opcodes into TrvState & TemperatureState."""
         dtm = getattr(msg, "dtm", getattr(msg, SZ_TIMESTAMP, None))
@@ -1071,7 +1123,7 @@ class StateProjector:
                 trv_updates[SZ_LAST_UPDATED] = dtm
 
             new_trv = dataclasses.replace(current_trv, **trv_updates)
-            target.trv_state = new_trv
+            cast("ZoneBase", target).trv_state = new_trv
 
             event = StateUpdatedEvent(
                 entity_id=getattr(target, "id", SZ_UNKNOWN),
@@ -1090,7 +1142,7 @@ class StateProjector:
             Code._2309,
             Code._2349,
         ):
-            updates: dict[str, Any] = {}
+            updates: PayloadT = {}
             if SZ_TEMPERATURE in payload:
                 # Legacy Parity: Physical sensors only track their own local sensor readings.
                 # We must ignore Zone temperature syncs sent TO them by the Controller.
@@ -1117,7 +1169,7 @@ class StateProjector:
                     getattr(target, "temp_state", None) or TemperatureState()
                 )
                 new_temp = dataclasses.replace(current_temp, **updates)
-                target.temp_state = new_temp
+                cast("ZoneBase", target).temp_state = new_temp
 
                 event = StateUpdatedEvent(
                     entity_id=getattr(target, "id", SZ_UNKNOWN),
@@ -1131,13 +1183,13 @@ class StateProjector:
                     target.apply_state_update(event)
 
     def _update_demand_state(
-        self, target: Any, payload: dict[str, Any], msg: Message
+        self, target: Entity, payload: PayloadT, msg: Message
     ) -> None:
         """Translate demand opcodes into DemandState."""
         if msg.code not in (Code._3150, Code._0008, Code._0009, Code._1100):
             return
 
-        updates: dict[str, Any] = {}
+        updates: PayloadT = {}
         slug = getattr(target, "_SLUG", "")
 
         if msg.code == Code._3150 and SZ_HEAT_DEMAND in payload:
@@ -1198,7 +1250,7 @@ class StateProjector:
 
         current_state = getattr(target, "demand_state", None) or DemandState()
         new_state = dataclasses.replace(current_state, **updates)
-        target.demand_state = new_state
+        cast("DeviceHeat", target).demand_state = new_state
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", SZ_UNKNOWN),
@@ -1231,14 +1283,14 @@ class StateProjector:
                     heat_dict[domain] = msg
 
     def _update_ufh_state(
-        self, target: Any, payload: dict[str, Any], msg: Message
+        self, target: Entity, payload: PayloadT, msg: Message
     ) -> None:
         """Translate UFH circuit arrays, demands, and telemetry into UfhState.
 
         :param target: Target entity or device (e.g. UfhController).
         :type target: Any
         :param payload: Decoded payload dictionary.
-        :type payload: dict[str, Any]
+        :type payload: PayloadT
         :param msg: Associated protocol message.
         :type msg: Message
         """
@@ -1248,7 +1300,7 @@ class StateProjector:
         current_state: UfhState = (
             getattr(target, "ufh_state", None) or UfhState()
         )
-        updates: dict[str, Any] = {}
+        updates: PayloadT = {}
         new_circuits = dict(current_state.circuits)
         dtm = getattr(msg, "dtm", getattr(msg, SZ_TIMESTAMP, None))
 
@@ -1257,7 +1309,7 @@ class StateProjector:
                 ufh_index=circuit_index
             )
 
-        def _get_circuit_index(data: dict[str, Any]) -> str | None:
+        def _get_circuit_index(data: PayloadT) -> str | None:
             for key in (
                 SZ_UFH_INDEX,
                 SZ_CIRCUIT_INDEX,
@@ -1296,9 +1348,7 @@ class StateProjector:
                     updates[SZ_HEAT_DEMANDS] = new_demands
 
                     circuit = _get_circuit(circuit_index)
-                    circuit_kwargs: dict[str, Any] = {
-                        SZ_HEAT_DEMAND: heat_value
-                    }
+                    circuit_kwargs: PayloadT = {SZ_HEAT_DEMAND: heat_value}
                     if dtm:
                         circuit_kwargs[SZ_LAST_UPDATED] = dtm
                     new_circuits[circuit_index] = dataclasses.replace(
@@ -1460,7 +1510,7 @@ class StateProjector:
             updates[SZ_LAST_UPDATED] = dtm
 
         new_state = dataclasses.replace(current_state, **updates)
-        target.ufh_state = new_state
+        cast("UfhController", target).ufh_state = new_state
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", SZ_UNKNOWN),
@@ -1472,13 +1522,13 @@ class StateProjector:
             target.apply_state_update(event)
 
     def _update_actuator_state(
-        self, target: Any, payload: dict[str, Any], msg: Message
+        self, target: Entity, payload: PayloadT, msg: Message
     ) -> None:
         """Translate actuator state opcodes into ActuatorState."""
         if msg.code not in (Code._3EF0, Code._3EF1):
             return
 
-        updates: dict[str, Any] = {}
+        updates: PayloadT = {}
         if SZ_MODULATION_LEVEL in payload:
             # NOTE: semantic parser custom keys
             updates[SZ_MODULATION_LEVEL] = payload[SZ_MODULATION_LEVEL]
@@ -1508,7 +1558,7 @@ class StateProjector:
 
         current_state = getattr(target, "act_state", None) or ActuatorState()
         new_state = dataclasses.replace(current_state, **updates)
-        target.act_state = new_state
+        cast("DeviceHeat", target).act_state = new_state
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", SZ_UNKNOWN),
@@ -1520,7 +1570,7 @@ class StateProjector:
             target.apply_state_update(event)
 
     def _update_zone_state(
-        self, target: Any, payload: dict[str, Any], msg: Message
+        self, target: Entity, payload: PayloadT, msg: Message
     ) -> None:
         """Translate zone configuration opcodes into ZoneState.
 
@@ -1531,7 +1581,7 @@ class StateProjector:
         - 2349 (zone_mode): updates zone_state.mode, setpoint, until
         - 2309 (setpoint): updates zone_state.setpoint
         """
-        updates: dict[str, Any] = {}
+        updates: PayloadT = {}
 
         if msg.code == Code._0004:
             if SZ_NAME in payload:
@@ -1585,4 +1635,4 @@ class StateProjector:
         if hasattr(target, "apply_state_update"):
             target.apply_state_update(event)
         else:
-            target.zone_state = new_state  # noqa: B010
+            cast("ZoneBase", target).zone_state = new_state

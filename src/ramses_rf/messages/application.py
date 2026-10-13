@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime as dt, timedelta as td
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ramses_tx.const import RP, RQ, W_, Code, Verb
 from ramses_tx.dtos import PacketDTO
@@ -12,6 +12,7 @@ from ramses_tx.dtos import PacketDTO
 from .base import Message
 
 if TYPE_CHECKING:
+    from ramses_rf.gateway import Gateway
     from ramses_tx.engine import Engine
 
 
@@ -24,7 +25,7 @@ class ApplicationMessage(Message):
 
     _engine: Engine | None = None
     _fraction_expired: float | None = None
-    _gateway: Any | None = None
+    _gateway: Gateway | None = None
     _delete_task_queued: bool = False
 
     @classmethod
@@ -33,7 +34,7 @@ class ApplicationMessage(Message):
         # Initialize the subclass identically to how the base class initializes
         return cls(dto)
 
-    def bind_context(self, gateway: Any) -> None:
+    def bind_context(self, gateway: Gateway) -> None:
         """Explicitly assign the application context (gateway).
 
         :param gateway: The application context (gateway) to associate.

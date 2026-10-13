@@ -1,0 +1,21 @@
+{
+    "main_tcs": "01:150000",
+    "known_list": {
+        "12:150003": {"class": "THM"}
+    },
+    "01:150000": {
+        "system": {},
+        "orphans": [],
+        "stored_hotwater": {},
+        "underfloor_heating": {},
+        "zones": {
+            "03": {
+                "class": "radiator_valve",
+                "sensor": "12:150003",
+                "actuators": [
+                    "04:150003"
+                ]
+            }
+        }
+    }
+}

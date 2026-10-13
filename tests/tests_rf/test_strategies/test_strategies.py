@@ -67,6 +67,105 @@ class TestOrconFanModes:
             strategy.fan_mode_to_hex("nonexistent")
 
 
+class TestOrconBoostCommands:
+    """Orcon 22F3 timed-boost commands — structural build + match.
+
+    Issue ramses-rf/ramses_cc#1332: remote-model dialects differ in the
+    flags byte (0x12 vs 0x02) and tail (04 04 04 vs 04 00 00), so boost
+    payloads are built/matched structurally rather than tabulated.
+    """
+
+    @pytest.fixture()
+    def strategy(self) -> OrconStrategy:
+        return OrconStrategy()
+
+    def test_builtin_commands_table(self, strategy: OrconStrategy) -> None:
+        """Generated table equals the previous hand-written literals."""
+        expected = {
+            "low_15": "00120F01040404",
+            "low_30": "00121E01040404",
+            "low_60": "00123C01040404",
+            "medium_15": "00120F02040404",
+            "medium_30": "00121E02040404",
+            "medium_60": "00123C02040404",
+            "high_15": "00120F03040404",
+            "high_30": "00121E03040404",
+            "high_60": "00123C03040404",
+        }
+        cmds = strategy.builtin_commands
+        assert list(cmds) == list(expected)  # names, in display order
+        for name, payload in expected.items():
+            assert cmds[name] == {
+                "verb": "I",
+                "code": Code._22F3,
+                "payload": payload,
+                "type": "boost_timer",
+            }
+
+    @pytest.mark.parametrize(
+        ("payload", "expected"),
+        [
+            ("00120F03040404", "high_15"),  # canonical 0x12 dialect
+            ("00020F03040000", "high_15"),  # VMN-15LF01 0x02 dialect
+            ("00121E02040404", "medium_30"),
+            ("00123C01040404", "low_60"),
+            ("00120A01040404", "low_10"),  # arbitrary duration
+            ("00520203040404", "high_120"),  # hours flag 0x40 → 2h
+            ("00120F09040404", None),  # unknown speed byte
+            ("00120003040404", None),  # minutes=0
+            ("01120F03040404", None),  # header != 00
+            ("00000A", None),  # 3-byte form (no speed byte)
+            ("ZZZZZZZZZZZZZZ", None),  # bad hex
+            ("00120F0304", None),  # short payload
+        ],
+    )
+    def test_boost_command_name(
+        self, strategy: OrconStrategy, payload: str, expected: str | None
+    ) -> None:
+        assert strategy.boost_command_name(Code._22F3, payload) == expected
+
+    def test_boost_command_name_wrong_code(
+        self, strategy: OrconStrategy
+    ) -> None:
+        assert (
+            strategy.boost_command_name(Code._31DA, "00120F03040404") is None
+        )
+
+    def test_boost_timer_payload_defaults(
+        self, strategy: OrconStrategy
+    ) -> None:
+        """Default dialect reproduces the canonical table payloads."""
+        assert strategy.boost_timer_payload("high", 15) == "00120F03040404"
+        assert strategy.boost_timer_payload("low", 60) == "00123C01040404"
+
+    def test_boost_timer_payload_dialect(
+        self, strategy: OrconStrategy
+    ) -> None:
+        """The observed 0x02-flags dialect is a parameter, not a variant."""
+        payload = strategy.boost_timer_payload(
+            0x03, 15, flags=0x02, tail=b"\x04\x00\x00"
+        )
+        assert payload == "00020F03040000"
+
+    def test_boost_timer_payload_validation(
+        self, strategy: OrconStrategy
+    ) -> None:
+        for speed, minutes in [("boost", 15), ("high", 0), ("high", 20000)]:
+            with pytest.raises(ValueError):
+                strategy.boost_timer_payload(speed, minutes)
+
+    def test_payload_builder_matcher_roundtrip(
+        self, strategy: OrconStrategy
+    ) -> None:
+        for speed in ("low", "medium", "high"):
+            for minutes in (10, 15, 30, 60):
+                payload = strategy.boost_timer_payload(speed, minutes)
+                assert (
+                    strategy.boost_command_name(Code._22F3, payload)
+                    == f"{speed}_{minutes}"
+                )
+
+
 class TestIthoFanModes:
     """Itho fan mode mapping."""
 
@@ -460,6 +559,13 @@ class TestBestHvacStrategy:
     def test_orcon_hrc350_model_selects_first_domain_capability(self) -> None:
         strategy = best_hvac_strategy(
             "32:134044", scheme="orcon", model="VMD-15RMS64"
+        )
+
+        assert isinstance(strategy, OrconHrc350Strategy)
+
+    def test_orcon_vmd_15rms86_selects_first_domain_capability(self) -> None:
+        strategy = best_hvac_strategy(
+            "32:123456", scheme="orcon", model="VMD-15RMS86"
         )
 
         assert isinstance(strategy, OrconHrc350Strategy)

@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from ramses_rf.const import SZ_DOMAIN_INDEX, SZ_ZONE_INDEX, DevType
 from ramses_rf.enums import TopologyAction
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
 from ramses_rf.pipeline.topology_handlers.base import TopologyHandler
+from ramses_rf.typing import PayloadT, SchemaT
 from ramses_tx.const import I_, Code
 
 
@@ -61,7 +60,7 @@ class RadTopologyHandler(TopologyHandler):
                 if zone_index is None and domain_id is None:
                     continue
 
-                metadata: dict[str, Any] = {}
+                metadata: SchemaT = {}
                 if getattr(msg.src, "type", None) in ("04", "08", DevType.TRV):
                     metadata["class"] = "radiator_valve"
 
@@ -175,7 +174,7 @@ class RadTopologyHandler(TopologyHandler):
             return
 
         # Break Mypy strict typing explicitly
-        raw_payload: Any = msg.data
+        raw_payload: PayloadT = msg.data
 
         # Catch Controller Sync Array (30C9 from 01 to --:------ or specific)
         if (

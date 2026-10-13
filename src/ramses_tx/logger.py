@@ -12,17 +12,25 @@ import re
 import shutil
 import sys
 from collections.abc import Callable, Mapping
-from datetime import datetime as dt
+from datetime import datetime as dt, time as dtime
 from logging.handlers import (
     MemoryHandler,
     QueueHandler,
     QueueListener,
     TimedRotatingFileHandler as _TimedRotatingFileHandler,
 )
+from os import PathLike
 from queue import Queue
-from typing import Any
+from types import TracebackType
+from typing import TypeAlias
 
 from .version import VERSION
+
+_SysExcInfoT: TypeAlias = (
+    tuple[type[BaseException], BaseException, TracebackType | None]
+    | tuple[None, None, None]
+    | None
+)
 
 DEV_MODE = False
 
@@ -82,8 +90,8 @@ class _Logger(logging.Logger):  # use packet.dtm for the log record timestamp
         fn: str,
         lno: int,
         msg: object,
-        args: Any,
-        exc_info: Any,
+        args: tuple[object, ...] | Mapping[str, object],
+        exc_info: _SysExcInfoT,
         func: str | None = None,
         extra: Mapping[str, object] | None = None,
         sinfo: str | None = None,
@@ -190,9 +198,30 @@ class BlockMqttFilter(logging.Filter):
 class TimedRotatingFileHandler(_TimedRotatingFileHandler):
     """Timed rotating log file handler with midnight rollover."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        filename: str | PathLike[str],
+        when: str = "MIDNIGHT",
+        interval: int = 1,
+        backupCount: int = 0,
+        encoding: str | None = None,
+        delay: bool = False,
+        utc: bool = False,
+        atTime: dtime | None = None,
+        errors: str | None = None,
+    ) -> None:
         """Initialize the timed rotating file handler."""
-        super().__init__(*args, **kwargs)
+        super().__init__(
+            filename,
+            when,
+            interval,
+            backupCount,
+            encoding,
+            delay,
+            utc,
+            atTime,
+            errors,
+        )
         assert self.when == "MIDNIGHT"
         self.extMatch = re.compile(r"^\d{4}-\d{2}-\d{2}$", re.ASCII)
 
@@ -222,13 +251,13 @@ def getLogger(  # permits a bespoke Logger class
     return logger
 
 
-def set_logger_timesource(dtm_now: Callable[..., dt]) -> None:
+def set_logger_timesource(dtm_now: Callable[[], dt]) -> None:
     """Set a custom record factory, with a bespoke source of timestamps.
 
     Used to have records with the same datetime as the most recent packet log record.
     """
 
-    def record_factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
+    def record_factory(*args: object, **kwargs: object) -> logging.LogRecord:
         record = old_factory(*args, **kwargs)
 
         ct = dtm_now().timestamp()
@@ -247,10 +276,10 @@ def set_packet_logging(
     cc_console: bool = False,
     packet_log_path: str | None = "",
     packet_log_prefix: str | None = "packet_log",
-    packet_log_retention_days: int = 7,
+    packet_log_retention_days: int | None = 7,
     rotate_bytes: int | None = None,
     buffer_capacity: int = 0,
-    flush_level: int = logging.ERROR,
+    flush_level: int | str = logging.ERROR,
     flush_interval: float = 60.0,
 ) -> QueueListener | None:
     """Create and configure packet log handlers and formatters.
@@ -328,6 +357,10 @@ def set_packet_logging(
         )  # record.levelno in (.INFO, .WARNING)
 
         if buffer_capacity > 0:
+            if not isinstance(flush_level, int):
+                flush_level = logging.getLevelNamesMapping().get(
+                    flush_level, logging.ERROR
+                )
             mem_handler = MemoryHandler(
                 capacity=buffer_capacity,
                 flushLevel=flush_level,
@@ -370,7 +403,7 @@ def set_packet_logging(
 
     # Use QueueHandler to decouple logging I/O from the main loop (see Issue #397)
     if handlers:
-        log_queue: Queue[Any] = Queue(-1)
+        log_queue: Queue[logging.LogRecord] = Queue(-1)
         listener = QueueListener(
             log_queue, *handlers, respect_handler_level=True
         )

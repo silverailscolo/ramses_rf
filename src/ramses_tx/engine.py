@@ -10,7 +10,7 @@ import logging
 import threading
 from collections.abc import Awaitable, Callable
 from datetime import datetime as dt
-from typing import TYPE_CHECKING, Any, Never
+from typing import TYPE_CHECKING, Never, cast
 
 from .address import ALL_DEV_ADDR, HGI_DEV_ADDR, NON_DEV_ADDR
 from .const import (
@@ -30,15 +30,16 @@ from .dtos import CommandDTO, PacketDTO
 from .exceptions import TransportError as _TransportError
 from .packet import Packet
 from .protocol import protocol_factory
-from .schemas import (
-    SZ_PACKET_LOG,
-    SZ_PORT_CONFIG,
-    SZ_PORT_NAME,
-    select_device_filter_mode,
-)
+from .schemas import select_device_filter_mode
 from .transport import TransportConfig, transport_factory
 from .transport.helpers import redact_url
-from .typing import DeviceIdT, PktLogConfigT, PortConfigT, QosParams
+from .typing import (
+    DeviceIdT,
+    PktLogConfigT,
+    PortConfigT,
+    QosParams,
+    SerPortNameT,
+)
 
 if TYPE_CHECKING:
     from .config import EngineConfig
@@ -59,7 +60,7 @@ class Engine:
     asynchronous command dispatching for the RF network.
     """
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # variadic factory kwargs
         self,
         config: EngineConfig,
         loop: asyncio.AbstractEventLoop | None = None,
@@ -125,7 +126,7 @@ class Engine:
 
         self._engine_lock = asyncio.Lock()
         self._engine_state: (
-            tuple[MsgHandlerT | None, bool | None, *tuple[Any, ...]] | None
+            tuple[MsgHandlerT | None, bool | None, *tuple[object, ...]] | None
         ) = None
 
         self._protocol: RamsesProtocolT = None  # type: ignore[assignment]  # set in start()
@@ -133,7 +134,7 @@ class Engine:
 
         # Thread-safe lock for task registry modifications
         self._tasks_lock = threading.Lock()
-        self._tasks: list[asyncio.Task[Any]] = []
+        self._tasks: list[asyncio.Task[object]] = []
 
         self._set_msg_handler(self._msg_handler)
 
@@ -197,6 +198,14 @@ class Engine:
         if device_id not in self._include:
             self._include.append(device_id)
 
+        # The protocol filters on a *copy* of this list taken when
+        # protocol_factory ran; mirror the change or a device accepted at
+        # runtime stays filtered until the next reload (ramses_cc issue
+        # 1331).
+        proto_include = getattr(self._protocol, "_include", None)
+        if proto_include is not None and device_id not in proto_include:
+            proto_include.append(device_id)
+
     def remove_from_include(self, device_id: str) -> None:
         """Remove a device ID from the include list if present.
 
@@ -208,6 +217,10 @@ class Engine:
         if device_id in self._include:
             self._include.remove(device_id)
 
+        proto_include = getattr(self._protocol, "_include", None)
+        if proto_include is not None and device_id in proto_include:
+            proto_include.remove(device_id)
+
     @property
     def enforce_known_list(self) -> bool:
         """Return whether the include list is strictly enforced.
@@ -218,7 +231,7 @@ class Engine:
         return bool(self._enforce_known_list)
 
     @property
-    def packet_log(self) -> PktLogConfigT | dict[Any, Any]:
+    def packet_log(self) -> PktLogConfigT | dict[Never, Never]:
         """Return the packet logging configuration.
 
         :return: The packet log configuration mapping.
@@ -264,13 +277,6 @@ class Engine:
 
         Initiate receiving (Messages) and sending (Commands).
         """
-        packet_source: dict[str, Any] = {}
-        if self.ser_name:
-            packet_source[SZ_PORT_NAME] = self.ser_name
-            packet_source[SZ_PORT_CONFIG] = self._port_config
-        else:
-            packet_source[SZ_PACKET_LOG] = self._input_file
-
         transport_config = TransportConfig(
             disable_sending=bool(self._disable_sending),
             log_all=bool(self._log_all_mqtt),
@@ -279,7 +285,7 @@ class Engine:
             app_context=self._app_context,
         )
 
-        extra_info: dict[str, Any] = {}
+        extra_info: dict[str, object] = {}
         if self._hgi_id:
             extra_info[SZ_ACTIVE_HGI] = self._hgi_id
 
@@ -289,7 +295,11 @@ class Engine:
             loop=self._loop,
             transport_constructor=self._transport_constructor,
             extra=extra_info if extra_info else None,
-            **packet_source,
+            port_name=SerPortNameT(self.ser_name) if self.ser_name else None,
+            port_config=(
+                cast(PortConfigT, self._port_config) if self.ser_name else None
+            ),
+            packet_log=None if self.ser_name else self._input_file,
         )
 
         # MQTT transports (HA-native pool bridge, direct paho) may take
@@ -365,7 +375,7 @@ class Engine:
         """Discard messages silently while paused."""
         _LOGGER.info("Message dropped while engine paused: %s", msg)
 
-    async def _pause(self, *args: Any) -> None:
+    async def _pause(self, *args: object) -> None:
         """Pause the (active) engine or raise a RuntimeError."""
         if self._engine_lock.locked():
             raise RuntimeError(
@@ -400,9 +410,9 @@ class Engine:
 
         self._engine_state = (handler, read_only, *args)
 
-    async def _resume(self) -> tuple[Any, ...]:
+    async def _resume(self) -> tuple[object, ...]:
         """Resume the (paused) engine or raise a RuntimeError."""
-        args: tuple[Any, ...]
+        args: tuple[object, ...]
 
         try:
             await asyncio.wait_for(self._engine_lock.acquire(), timeout=0.1)
@@ -435,7 +445,7 @@ class Engine:
 
         return tuple(args)
 
-    def add_task(self, task: asyncio.Task[Any]) -> None:
+    def add_task(self, task: asyncio.Task[object]) -> None:
         """Keep a track of tasks securely, so we can tidy-up."""
         with self._tasks_lock:
             self._tasks = [t for t in self._tasks if not t.done()]

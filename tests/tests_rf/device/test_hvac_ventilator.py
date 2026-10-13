@@ -96,6 +96,7 @@ class TestHvacVentilator:
         :param hvac_ventilator: The HvacVentilator fixture.
         :type hvac_ventilator: HvacVentilator
         """
+        assert hvac_ventilator._supports_10d0 is False
         assert hvac_ventilator._supports_2411 is False
         assert hvac_ventilator._initialized_callback is None
         assert hvac_ventilator._param_update_callback is None
@@ -265,6 +266,53 @@ class TestHvacVentilator:
             hvac_ventilator.get_configured_strategy(model="other"),
             OrconStrategy,
         )
+
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()
+
+    def test_vmd_15rms86_10e0_selects_hrc350(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
+        """A VMD-15RMS86's own 10E0 selects the HRC-350 demand layout."""
+        # Arrange: an Orcon FAN that reports VMD-15RMS86 (an HRC-350)
+        hvac_ventilator._update_traits(DeviceTraits(scheme="orcon"))
+        hvac_ventilator.entity_state.update_state(
+            Message._from_packet(
+                Packet(
+                    dt.now(UTC),
+                    "...  I --- 32:123456 63:262142 --:------ 10E0 038 "
+                    "000001C8950B0A67FEFFFFFFFFFF150107E5564D442D3135524D533836"
+                    "000000000000000000",  # description='VMD-15RMS86'
+                )
+            )
+        )
+
+        # Act
+        strategy = hvac_ventilator.get_configured_strategy()
+
+        # Assert
+        assert hvac_ventilator.model == "VMD-15RMS86"
+        assert isinstance(strategy, OrconHrc350Strategy)
+        assert strategy.ventilation_demand_payload(0.5) == "0000640001000000"
+
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()
+
+    def test_vmd_15rms86_2_model_keeps_second_domain_layout(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
+        """A VMD-15RMS86-2 keeps the generic Orcon (second-domain) layout."""
+        # Arrange
+        hvac_ventilator._update_traits(DeviceTraits(scheme="orcon"))
+
+        # Act
+        strategy = hvac_ventilator.get_configured_strategy(
+            model="VMD-15RMS86-2"
+        )
+
+        # Assert
+        assert type(strategy) is OrconStrategy
+        assert strategy.ventilation_demand_payload(0.3) == "0000000001001E00"
 
         if hvac_ventilator._gateway.message_store:
             hvac_ventilator._gateway.message_store.stop()

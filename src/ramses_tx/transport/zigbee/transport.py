@@ -157,7 +157,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
         self._extra[SZ_IS_EVOFW3] = True
         self._hass = config.app_context
-        self._tasks: set[asyncio.Task[Any]] = set()
+        self._tasks: set[asyncio.Task[object]] = set()
         self._device_online: bool = False
         self._availability_unsub: Callable[[], None] | None = None
 
@@ -757,7 +757,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         except Exception:
             _LOGGER.exception("Zigbee unacked send failed")
 
-    def _track_task(self, task: asyncio.Task[Any]) -> None:
+    def _track_task(self, task: asyncio.Task[object]) -> None:
         """Add a task to the registry to prevent garbage collection."""
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)

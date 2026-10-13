@@ -9,9 +9,10 @@ See :doc:`roadmap item 5 <https://github.com/ramses-rf/ramses_rf/issues/1093>`.
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from ramses_rf.models import HvacState
+from ramses_rf.typing import SchemaT
 from ramses_tx.const import Code, IndexT
 
 
@@ -73,20 +74,20 @@ class HvacStrategy(Protocol):
 
     def apply_quirk(
         self,
-        payload: dict[str, Any],
+        payload: SchemaT,
         current_state: HvacState | None,
         msg_code: Code | str,
-    ) -> dict[str, Any]:
+    ) -> SchemaT:
         """Apply vendor-specific payload transformations.
 
         :param payload: The flattened, canonical telemetry dictionary.
-        :type payload: dict[str, Any]
+        :type payload: SchemaT
         :param current_state: The existing Read-Model for the device.
         :type current_state: HvacState | None
         :param msg_code: The hex opcode of the incoming message.
         :type msg_code: Code | str
         :returns: The safely mutated telemetry dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         ...
 
@@ -112,6 +113,24 @@ class HvacStrategy(Protocol):
 
         :returns: Dict of command name → template.
         :rtype: dict[str, dict[str, str]]
+        """
+        ...
+
+    def boost_command_name(self, code: Code | str, payload: str) -> str | None:
+        """Canonical builtin boost-timer name for an observed payload.
+
+        Structural match: strategies that support 22F3-style timed
+        boosts map a received payload to one of their
+        ``builtin_commands`` names (e.g. ``"high_15"``), tolerating
+        per-model dialect differences in the non-semantic bytes.
+
+        :param code: The opcode of the inbound frame.
+        :type code: Code | str
+        :param payload: The payload hex string.
+        :type payload: str
+        :returns: The canonical command name, or None if the frame is
+            not a recognizable boost command for this vendor.
+        :rtype: str | None
         """
         ...
 
@@ -255,10 +274,10 @@ class HvacStrategyBase:
 
     def apply_quirk(
         self,
-        payload: dict[str, Any],
+        payload: SchemaT,
         current_state: HvacState | None,
         msg_code: Code | str,
-    ) -> dict[str, Any]:
+    ) -> SchemaT:
         """Apply all-vendor normalisations.
 
         Vendor-specific quirks are handled by subclass overrides
@@ -266,13 +285,13 @@ class HvacStrategyBase:
         vendor-specific logic.
 
         :param payload: The flattened, canonical telemetry dictionary.
-        :type payload: dict[str, Any]
+        :type payload: SchemaT
         :param current_state: The existing Read-Model for the device.
         :type current_state: HvacState | None
         :param msg_code: The hex opcode of the incoming message.
         :type msg_code: Code | str
         :returns: The safely mutated telemetry dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         mutated = dict(payload)
 
@@ -422,3 +441,21 @@ class HvacStrategyBase:
         :rtype: dict[str, dict[str, str]]
         """
         return dict(self._builtin_commands)
+
+    def boost_command_name(self, code: Code | str, payload: str) -> str | None:
+        """Canonical builtin boost-timer name for an observed payload.
+
+        Structural match: strategies that support 22F3-style timed
+        boosts map a received payload to one of their
+        ``builtin_commands`` names (e.g. ``"high_15"``), tolerating
+        per-model dialect differences in the non-semantic bytes.
+
+        :param code: The opcode of the inbound frame.
+        :type code: Code | str
+        :param payload: The payload hex string.
+        :type payload: str
+        :returns: The canonical command name, or None if the frame is
+            not a recognizable boost command for this vendor.
+        :rtype: str | None
+        """
+        return None

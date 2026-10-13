@@ -21,6 +21,7 @@ from ramses_rf.models import (
     UfhState,
 )
 from ramses_rf.topology import Child, Parent
+from ramses_rf.typing import SchemaT
 from ramses_tx.const import FA
 from ramses_tx.typing import DeviceIdT, DevIndexT
 
@@ -43,7 +44,7 @@ class Controller(DeviceHeat):  # CTL (01):
     _SLUG = DevType.CTL
     _STATE_ATTR = HEAT_DEMAND
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         """Initialise the Controller device.
@@ -62,7 +63,7 @@ class Controller(DeviceHeat):  # CTL (01):
             **kwargs
         )  # NOTE: must create_from_schema first
 
-    def _make_tcs_controller(
+    def _make_tcs_controller(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self, *, msg: Message | None = None, **_schema: Any
     ) -> None:  # CH/DHW
         """Attach a TCS (create it if required) after passing it any msg.
@@ -119,7 +120,7 @@ class UfhController(Parent["UfhCircuit"], DeviceHeat):  # UFC (02):
     # 12:27:24.824 059  I --- 01:191718 --:------ 01:191718 3150 002 FC5C
     # 12:27:24.857 067  I --- 02:000921 --:------ 02:000921 3150 006 0060-015A-025C
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         """Initialise the UfhController device.
@@ -140,7 +141,7 @@ class UfhController(Parent["UfhCircuit"], DeviceHeat):  # UFC (02):
             "circuit_by_id", {f"{i:02X}": {} for i in range(8)}
         )
 
-    def get_circuit(
+    def get_circuit(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self, ufh_index: str, *, msg: Message | None = None, **schema: Any
     ) -> UfhCircuit:
         """Return a UFH circuit, create it if required.
@@ -291,14 +292,14 @@ class UfhController(Parent["UfhCircuit"], DeviceHeat):  # UFC (02):
                 return pump_state
         return None
 
-    async def setpoints(self) -> dict[str, Any] | None:  # 22C9|ufh_index array
+    async def setpoints(self) -> SchemaT | None:  # 22C9|ufh_index array
         """Return the UFH setpoints dictionary.
 
         # TODO: Refactor for #714 (CQRS API Boundaries).
         # This is a legacy shim to maintain backward compatibility with ramses_cc.
 
         :returns: Setpoints dictionary mapped by circuit index, or None.
-        :rtype: dict[str, Any] | None
+        :rtype: SchemaT | None
         """
         state = getattr(self, "ufh_state", None)
         if state is None:
@@ -307,11 +308,11 @@ class UfhController(Parent["UfhCircuit"], DeviceHeat):  # UFC (02):
         result = state.setpoints
         return result if isinstance(result, dict) else None
 
-    async def schema(self) -> dict[str, Any]:
+    async def schema(self) -> SchemaT:
         """Return the device circuit configuration schema.
 
         :returns: Schema dictionary containing circuits mapping.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         base_schema = await super().schema()
         return {
@@ -319,11 +320,11 @@ class UfhController(Parent["UfhCircuit"], DeviceHeat):  # UFC (02):
             SZ_CIRCUITS: getattr(self, "circuit_by_id", {}),
         }
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return the device setpoints and parameter values.
 
         :returns: Parameter dictionary containing circuit setpoints.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         base_params = await super().params()
         return {
@@ -331,11 +332,11 @@ class UfhController(Parent["UfhCircuit"], DeviceHeat):  # UFC (02):
             SZ_CIRCUITS: await self.setpoints(),
         }
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the current operating status dictionary.
 
         :returns: Status dictionary with heat demand and relay demands.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         base_status = await super().status()
         return {
@@ -400,7 +401,7 @@ class UfhCircuit(Child, Entity):
         """
         self._zone = zone
 
-    def _update_schema(
+    def _update_schema(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self, *, zone: Zone | None = None, **kwargs: Any
     ) -> None:
         """Update circuit schema parameters.

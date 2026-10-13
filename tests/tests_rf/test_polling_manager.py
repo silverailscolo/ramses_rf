@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from ramses_rf.config import GatewayConfig, strip_and_map_traits
-from ramses_rf.const import Code, DevType, Verb
+from ramses_rf.const import FF, Code, DevType, Verb
 from ramses_rf.devices.dev_base import BatteryState, DeviceBase
 from ramses_rf.exceptions import RamsesException
 from ramses_rf.gateway import Gateway
@@ -15,7 +15,9 @@ from ramses_rf.models import DeviceTraits
 from ramses_rf.pipeline.polling import (
     DEFAULT_POLLING_SCHEDULES,
     INTERVAL_DAILY,
+    INTERVAL_FAN_KEEP_ALIVE,
     INTERVAL_STARTUP_2E04,
+    INTERVAL_STARTUP_POLL,
     POLL_REPLY_TIMEOUT,
     PollingManager,
 )
@@ -93,6 +95,81 @@ def test_polling_manager_schedule_resolution_defaults(
     assert ctl_schedule == DEFAULT_POLLING_SCHEDULES["CTL"]
     assert bdr_schedule == DEFAULT_POLLING_SCHEDULES["BDR"]
     assert fan_schedule == DEFAULT_POLLING_SCHEDULES["FAN"]
+
+
+def test_polling_manager_fan_keepalive_roles(
+    mock_gateway: MagicMock,
+) -> None:
+    """FAN keep-alive swaps from 10E0 to 10D0 once support is confirmed.
+
+    Until supports_10d0 is confirmed, the universally-answered 10E0 keeps
+    the device alive at keep-alive rate and 10D0 only re-probes daily.
+    Once confirmed, 10D0 replies carry liveness + filter data, so 10E0
+    drops back to daily (issue 1288).
+    """
+    poller = PollingManager(mock_gateway, shadow_mode=True)
+
+    unconfirmed_fan = MockDevice(mock_gateway, "32:333333", slug="FAN")
+    schedule = poller.resolve_schedule_for_device(unconfirmed_fan)
+    assert schedule[Code._10E0] == INTERVAL_FAN_KEEP_ALIVE
+    assert schedule[Code._10D0] == INTERVAL_DAILY
+
+    supported_fan = MockDevice(mock_gateway, "32:444444", slug="FAN")
+    supported_fan.supports_10d0 = True  # set by 10D0 RP ingestion
+    schedule = poller.resolve_schedule_for_device(supported_fan)
+    assert schedule[Code._10E0] == INTERVAL_DAILY
+    assert schedule[Code._10D0] == INTERVAL_FAN_KEEP_ALIVE
+
+
+def test_polling_manager_fan_keepalive_user_override(
+    mock_gateway: MagicMock,
+) -> None:
+    """An explicit polling_interval trait wins over the keep-alive roles."""
+    traits = DeviceTraits(polling_interval={Code._10E0: 3600, Code._10D0: 300})
+    fan_dev = MockDevice(mock_gateway, "32:555555", slug="FAN", traits=traits)
+    fan_dev.supports_10d0 = True
+    poller = PollingManager(mock_gateway, shadow_mode=True)
+
+    schedule = poller.resolve_schedule_for_device(fan_dev)
+    assert schedule[Code._10E0] == 3600
+    assert schedule[Code._10D0] == 300
+
+
+def test_polling_manager_interval_change_reschedules_next_due(
+    mock_gateway: MagicMock,
+) -> None:
+    """A changed interval must recompute next_due, not wait for the old one.
+
+    Without this, the 10E0/10D0 keep-alive swap (when supports_10d0 is
+    confirmed) and user polling_interval overrides would only take
+    effect at the previously-scheduled time — up to a day away
+    (issue 1288).
+    """
+    poller = PollingManager(mock_gateway, shadow_mode=True)
+    fan_dev = MockDevice(mock_gateway, "32:333333", slug="FAN")
+    mock_gateway.device_registry.devices = [fan_dev]
+
+    poller.update_device_tasks(fan_dev)
+    dkey = ("32:333333", Code._10D0)
+    task = poller._tasks[dkey]
+    assert task.interval == INTERVAL_DAILY
+    first_due = task.next_due
+    # first due is the early startup poll (INTERVAL_STARTUP_POLL), not the
+    # full daily interval (ramses-rf/ramses_cc#1335)
+    assert first_due <= dt.now(UTC) + td(seconds=INTERVAL_STARTUP_POLL + 5)
+
+    # supports_10d0 confirmed by an RP|10D0 → 10D0 becomes keep-alive
+    fan_dev.supports_10d0 = True
+    poller.update_device_tasks(fan_dev)
+
+    assert task.interval == INTERVAL_FAN_KEEP_ALIVE
+    # the new cadence is rescheduled from now — not left at the old due
+    assert task.next_due >= dt.now(UTC) + td(
+        seconds=INTERVAL_FAN_KEEP_ALIVE - 5
+    )
+    assert task.next_due <= dt.now(UTC) + td(
+        seconds=INTERVAL_FAN_KEEP_ALIVE + 5
+    )
 
 
 def test_polling_manager_custom_trait_override(
@@ -460,8 +537,9 @@ def test_polling_manager_2e04_first_poll_is_early(
 
     Cached 2E04 packets are no longer replayed on restore (issue
     ramses-rf/ramses_cc#1242), so the real system mode must be fetched
-    early instead of after a full daily interval.  Other codes keep
-    their regular first-poll delay.
+    early instead of after a full daily interval.  Other codes also
+    get an early first poll via INTERVAL_STARTUP_POLL (issue
+    ramses-rf/ramses_cc#1335), but 2E04 keeps its earlier deadline.
     """
     # ARRANGE
     poller = PollingManager(mock_gateway, shadow_mode=True)
@@ -475,12 +553,115 @@ def test_polling_manager_2e04_first_poll_is_early(
     # ASSERT
     tasks = {t.code: t for t in poller.get_scheduled_cmds()}
     assert tasks[Code._2E04].interval == INTERVAL_DAILY
+    assert tasks[Code._2E04].payload == FF
     assert (
         now + td(seconds=INTERVAL_STARTUP_2E04)
         <= tasks[Code._2E04].next_due
         <= after + td(seconds=INTERVAL_STARTUP_2E04)
     )
-    assert tasks[Code._10E0].next_due - now > td(hours=23)
+    assert tasks[Code._10E0].next_due <= after + td(
+        seconds=INTERVAL_STARTUP_POLL
+    )
+
+
+def test_polling_manager_first_poll_is_early(
+    mock_gateway: MagicMock,
+) -> None:
+    """Newly registered tasks first poll shortly after startup.
+
+    Without an early first poll, every task waits a full interval after
+    (re)start — hourly codes stay silent for an hour and daily codes for
+    a day, so polling looks dead after every restart
+    (ramses-rf/ramses_cc#1335).  Tasks whose interval is already below
+    INTERVAL_STARTUP_POLL keep their own interval.
+    """
+    # ARRANGE
+    poller = PollingManager(mock_gateway, shadow_mode=True)
+    ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
+    now = dt.now(UTC)
+
+    # ACT
+    poller.update_device_tasks(ctl_dev)
+    after = dt.now(UTC)
+
+    # ASSERT: hourly/daily codes are first due within the startup window
+    early_codes = (Code._10E0, Code._1F41, Code._313F, Code._1100)
+    tasks = {t.code: t for t in poller.get_scheduled_cmds()}
+    for code in early_codes:
+        assert code in tasks, f"missing task for {code}"
+        assert tasks[code].next_due <= after + td(
+            seconds=INTERVAL_STARTUP_POLL
+        ), f"{code} first poll not early: {tasks[code].next_due}"
+        assert tasks[code].next_due >= now
+
+
+def test_polling_manager_first_poll_early_for_otb_3220(
+    mock_gateway: MagicMock,
+) -> None:
+    """The OTB's per-Data-ID 3220 tasks also poll early after restart.
+
+    The reporter of ramses-rf/ramses_cc#1335 saw no 3220 traffic for the
+    first hour after every restart because all 14 subtasks waited a full
+    hourly interval.
+    """
+    # ARRANGE
+    poller = PollingManager(mock_gateway, shadow_mode=True)
+    otb_dev = MockDevice(mock_gateway, "10:111111", slug="OTB")
+    now = dt.now(UTC)
+
+    # ACT
+    poller.update_device_tasks(otb_dev)
+    after = dt.now(UTC)
+
+    # ASSERT
+    otb_3220 = [
+        t
+        for t in poller.get_scheduled_cmds()
+        if t.code == Code._3220 and t.device_id == "10:111111"
+    ]
+    assert len(otb_3220) == len(OPENTHERM_POLL_DATA_IDS)
+    for task in otb_3220:
+        assert task.next_due <= after + td(seconds=INTERVAL_STARTUP_POLL)
+        assert task.next_due >= now
+
+
+@pytest.mark.asyncio
+async def test_polling_manager_2e04_rq_uses_ff_payload(
+    mock_gateway: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The 2E04 poll RQ must use payload FF, not the generic "00".
+
+    FF is the canonical RQ|2E04 payload used by build_get_system_mode
+    and seen in all real-world captures; a "00" payload may not be
+    answered by every controller, leaving system_mode unhydrated
+    (ramses-rf/ramses_cc#1323).
+    """
+    # ARRANGE
+    monkeypatch.setattr("asyncio.sleep", AsyncMock())
+    poller = PollingManager(mock_gateway, shadow_mode=False)
+    ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
+    mock_gateway.device_registry.devices = [ctl_dev]
+    poller.update_device_tasks(ctl_dev)
+
+    # Fast-forward all tasks to trigger due commands
+    past = dt.now(UTC) - td(seconds=10)
+    for task in poller.get_scheduled_cmds():
+        task.next_due = past
+
+    # ACT
+    await poller.poll_due_commands()
+
+    # ASSERT: find the 2E04 call and check its payload
+    for call in mock_gateway._async_send_dto.call_args_list:
+        dto: CommandDTO = call.args[0]
+        if dto.code == Code._2E04:
+            assert dto.payload == FF, (
+                f"Expected 2E04 payload 'FF', got '{dto.payload}'"
+            )
+            break
+    else:
+        pytest.fail("No 2E04 RQ was sent")
 
 
 @pytest.mark.asyncio

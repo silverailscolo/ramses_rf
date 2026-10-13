@@ -1,7 +1,6 @@
 """RAMSES RF - Intent-to-DTO Translation Helpers."""
 
 from datetime import datetime as dt
-from typing import Any
 
 from ramses_rf.address import Address
 from ramses_rf.const import ZON_MODE_MAP
@@ -100,10 +99,10 @@ def normalise_mode(
 
 def normalise_until(
     mode: int | str | None,
-    _: Any,
+    _: object,
     until: dt | str | None,
     duration: int | None,
-) -> tuple[Any, Any]:
+) -> tuple[dt | str | None, int | None]:
     """Validate and normalise timing parameters for zone or DHW mode changes.
 
     :param mode: Normalised heating mode string.

@@ -527,7 +527,7 @@ def build_get_hvac_fan_10d0(intent: Command) -> CommandDTO:
     """
     payload = "00"
 
-    addr1, addr2, addr3 = resolve_addrs(intent.src, intent.src)
+    addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
     return CommandDTO(
         verb=RQ,
         addr1=addr1,

@@ -7,7 +7,6 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime as dt
-from typing import Any
 
 from .. import exceptions as exc
 from ..helpers import dt_now
@@ -43,7 +42,7 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         /,
         *,
         config: TransportConfig,
-        extra: dict[str, Any] | None = None,
+        extra: dict[str, object] | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize the callback transport.

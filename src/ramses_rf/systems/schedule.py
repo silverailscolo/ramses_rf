@@ -10,7 +10,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import time as dtm_time
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Final, Self
+from typing import TYPE_CHECKING, Any, Final, Self, cast
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import (
@@ -219,7 +219,9 @@ class ScheduleData:
             )
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> Self:
+    def from_dict(  # type: ignore[explicit-any]  # heterogeneous schedule dict
+        cls, data: Mapping[str, Any]
+    ) -> Self:
         """Parse raw dictionary into typed ScheduleData dataclass.
 
         :param data: Raw schedule dictionary representation.
@@ -888,7 +890,7 @@ class Schedule:  # 0404
             wait_for_reply=True,
         )
 
-    def _normalise_and_validate(
+    def _normalise_and_validate(  # type: ignore[explicit-any]  # heterogeneous schedule dict
         self, schedule: WeeklySchedule | Mapping[str, Any]
     ) -> WeeklyScheduleDict:
         """Normalise and validate schedule dictionary structure.
@@ -899,7 +901,7 @@ class Schedule:  # 0404
         :rtype: WeeklyScheduleDict
         :raises exc.ScheduleError: On validation failure.
         """
-        raw_list: Any = schedule
+        raw_list = schedule
         if isinstance(schedule, Mapping):
             provided_index = schedule.get(
                 SZ_ZONE_INDEX,
@@ -921,7 +923,7 @@ class Schedule:  # 0404
         full_schedule: WeeklyScheduleDict = {
             SZ_ZONE_INDEX: self.index,
             SZ_ZONE_IDX: self.index,
-            SZ_SCHEDULE: raw_list,
+            SZ_SCHEDULE: cast(WeeklySchedule, raw_list),
         }
 
         try:
@@ -937,7 +939,7 @@ class Schedule:  # 0404
 
         return validated
 
-    async def set_schedule(
+    async def set_schedule(  # type: ignore[explicit-any]  # heterogeneous schedule dict
         self,
         schedule: WeeklySchedule | Mapping[str, Any],
         force_refresh: bool = False,

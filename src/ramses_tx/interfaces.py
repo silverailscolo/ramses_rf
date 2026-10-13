@@ -22,7 +22,9 @@ class TransportInterface(ABC):
         """Close the transport."""
 
     @abstractmethod
-    def get_extra_info(self, name: str, default: Any = None) -> Any:
+    def get_extra_info(  # type: ignore[explicit-any]  # heterogeneous channel
+        self, name: str, default: Any = None
+    ) -> Any:
         """Get extra information about the transport."""
 
     @abstractmethod
@@ -82,7 +84,11 @@ class ProtocolInterface(ABC, asyncio.Protocol):
 
     @abstractmethod
     def connection_made(
-        self, transport: Any, /, *, ramses: bool = False
+        self,
+        transport: asyncio.BaseTransport | TransportInterface,
+        /,
+        *,
+        ramses: bool = False,
     ) -> None:
         """Handle connection made event."""
 
@@ -119,5 +125,5 @@ class ProtocolInterface(ABC, asyncio.Protocol):
         """Wait for connection_made to be called."""
 
     @abstractmethod
-    def set_regex_rules(self, rules: Any) -> None:
+    def set_regex_rules(self, rules: dict[str, dict[str, str]]) -> None:
         """Set regex rules on the protocol."""

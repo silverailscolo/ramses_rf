@@ -50,10 +50,11 @@ from ramses_rf.enums import Action
 from ramses_rf.helpers import shrink
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits, HvacState
+from ramses_rf.typing import SchemaT
 from ramses_tx import Priority
 from ramses_tx.typing import DeviceIdT
 
-from .dev_base import DeviceHvac
+from .dev_base import DeviceHvac, HgiGateway
 
 # TODO: Switch this module to utilise the (run-time) decorator design pattern...
 # - https://refactoring.guru/design-patterns/decorator/python/example
@@ -77,7 +78,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
 
     _supports_10d0: bool = False
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # passthrough to super
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         """Initialize the FilterChange class and start daily polling.
@@ -97,11 +98,6 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
                  not available
         :rtype: int | None
         """
-        # Mark that we support 10D0 Filter Remaining
-        if not self._supports_10d0 and self.hvac_state.filter_remaining_days:
-            self._supports_10d0 = True
-            _LOGGER.debug("Device %s supports 10D0 Filter Change", self.id)
-
         return self.hvac_state.filter_remaining_days
 
     async def filter_remaining_percent(self) -> float | None:
@@ -111,11 +107,6 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
                  not available
         :rtype: float | None
         """
-        # Mark that we support 10D0 Filter Remaining
-        if not self._supports_10d0 and self.hvac_state.filter_remaining_days:
-            self._supports_10d0 = True
-            _LOGGER.debug("Device %s supports 10D0 Filter Change", self.id)
-
         return self.hvac_state.filter_remaining_percent
 
     @property
@@ -133,7 +124,7 @@ class RfsGateway(DeviceHvac):  # RFS: (spIDer gateway)
 
     _SLUG: str = DevType.RFS
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # passthrough to super
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         """Initialize the RFS gateway.
@@ -174,13 +165,13 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     _supports_2411: bool
     _params_2411: dict[str, float]
     _initialized_callback: Callable[[], None] | None
-    _param_update_callback: Callable[[str, Any], None] | None
-    _hgi: Any | None
+    _param_update_callback: Callable[[str, Any], None] | None  # type: ignore[explicit-any]  # heterogeneous 2411 value
+    _hgi: HgiGateway | None
     _bound_devices: dict[str, str]
     _remote_ids: set[DeviceIdT]
     _sensor_ids: set[DeviceIdT]
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # passthrough to super
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         """Initialize the HvacVentilator.
@@ -194,7 +185,6 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
     def _init_fan_state(self) -> None:
         """Initialize FAN-specific instance attributes (idempotent)."""
-        self.__dict__.setdefault("_supports_10d0", False)
         self.__dict__.setdefault("_supports_2411", False)
         self.__dict__.setdefault("_params_2411", {})
         self.__dict__.setdefault("_initialized_callback", None)
@@ -218,7 +208,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         """
         return HEARTBEAT_TIMEOUT_FAN
 
-    def _update_schema(self, **schema: Any) -> None:
+    def _update_schema(  # type: ignore[explicit-any]  # schema-tree kwargs
+        self, **schema: Any
+    ) -> None:
         """Update this FAN with its remotes/sensors membership from schema.
 
         Unlike heating Parent/Child, this does NOT use the shared
@@ -257,18 +249,18 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             if hasattr(child, "_parent_fan"):
                 child._parent_fan = self
 
-    async def schema(self) -> dict[str, Any]:
+    async def schema(self) -> SchemaT:
         """Return the FAN's schema (remotes/sensors membership).
 
         :returns: A schema dictionary with remotes and sensors lists.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         from ramses_rf.schemas import (
             SZ_REMOTES,
             SZ_SENSORS,
         )
 
-        result: dict[str, Any] = {}
+        result: SchemaT = {}
         if self._remote_ids:
             result[SZ_REMOTES] = sorted(self._remote_ids)
         if self._sensor_ids:
@@ -319,7 +311,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
                     # Clear the callback so it's only called once
                     self._initialized_callback = None
 
-    def set_param_update_callback(
+    def set_param_update_callback(  # type: ignore[explicit-any]  # heterogeneous 2411 value
         self, callback: Callable[[str, Any], None] | None
     ) -> None:
         """Set a callback to be called when 2411 parameters are updated.
@@ -341,7 +333,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         """
         self._param_update_callback = callback
 
-    def _handle_param_update(self, parameter_id: str, value: Any) -> None:
+    def _handle_param_update(  # type: ignore[explicit-any]  # heterogeneous 2411 value
+        self, parameter_id: str, value: Any
+    ) -> None:
         """Handle a parameter update and notify listeners.
 
         This method processes parameter updates and notifies any registered
@@ -378,7 +372,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         return self._supports_10d0
 
     @property
-    def hgi(self) -> Any | None:
+    def hgi(self) -> HgiGateway | None:
         """Return the HGI (Home Gateway Interface) device if available.
 
         The HGI device provides additional functionality for certain operations.
@@ -910,7 +904,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         """
         return self.hvac_state.supply_temp
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the status of the ventilation device."""
         base_status = await super().status()
         cqrs_status = {
@@ -953,7 +947,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             **{k: v for k, v in cqrs_status.items() if v is not None},
         }
 
-        shim_status: dict[str, Any] = {}
+        shim_status: SchemaT = {}
         for key, value in merged_status.items():
             # Ensure Enums are serialised to strings to prevent leakage
             k_str = str(getattr(key, "value", key))

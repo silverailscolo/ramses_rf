@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from functools import partial
 from logging.handlers import QueueListener
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Unpack
 
 from .address import (
     ALL_DEV_ADDR,
@@ -46,7 +46,7 @@ from .protocol import (
 )
 from .schemas import SZ_SERIAL_PORT
 from .transport import RamsesTransportT, ZigbeeTransport, transport_factory
-from .typing import DeviceIdT, QosParams
+from .typing import DeviceIdT, PktLogConfigT, QosParams
 from .version import VERSION
 
 from .const import (  # isort: skip
@@ -125,17 +125,20 @@ if TYPE_CHECKING:
 
 
 async def set_packet_logging_config(
-    **config: Any,
+    cc_console: bool = False,
+    **config: Unpack[PktLogConfigT],
 ) -> tuple[Logger, QueueListener | None]:
     """Set up ramses packet logging to a file or port.
 
     Must run async in executor to prevent HA blocking call opening packet log file.
 
-    :param config: if file_name is included, opens packet_log file
+    :param cc_console: If True, output to stdout/stderr.
+    :param config: packet log configuration (see :class:`PktLogConfigT`).
     :return: a tuple (logging.Logger, QueueListener)
     """
     loop = asyncio.get_running_loop()
     listener = await loop.run_in_executor(
-        None, partial(set_packet_logging, PKT_LOGGER, **config)
+        None,
+        partial(set_packet_logging, PKT_LOGGER, cc_console, **config),
     )
     return PKT_LOGGER, listener

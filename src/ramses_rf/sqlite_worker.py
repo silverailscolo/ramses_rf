@@ -8,8 +8,9 @@ import logging
 import queue
 import sqlite3
 import threading
+from datetime import datetime as dt
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ _LOGGER = logging.getLogger(__name__)
 class PacketLogEntry(NamedTuple):
     """Represents a packet to be written to the database."""
 
-    dtm: Any
+    dtm: dt
     verb: str
     src: str
     dst: str
@@ -32,7 +33,7 @@ class PacketLogEntry(NamedTuple):
 class PruneRequest(NamedTuple):
     """Represents a request to prune old records."""
 
-    dtm_limit: Any
+    dtm_limit: dt
 
 
 class SnapshotRequest(NamedTuple):
@@ -45,7 +46,7 @@ class DeleteMessageRequest(NamedTuple):
     """Represents a request to delete a specific message or set of messages."""
 
     query: str
-    params: tuple[Any, ...]
+    params: tuple[object, ...]
 
 
 class FlushRequest(NamedTuple):
@@ -92,7 +93,7 @@ class SQLiteWorker:
         """Submit a packet tuple for SQL insertion (Non-blocking)."""
         self._queue.put(packet)
 
-    def submit_prune(self, dtm_limit: Any) -> None:
+    def submit_prune(self, dtm_limit: dt) -> None:
         """Submit a prune request for SQL deletion (Non-blocking)."""
         self._queue.put(PruneRequest(dtm_limit))
 
@@ -101,7 +102,7 @@ class SQLiteWorker:
         self._queue.put(SnapshotRequest())
 
     def submit_delete_message(
-        self, query: str, parameters: tuple[Any, ...]
+        self, query: str, parameters: tuple[object, ...]
     ) -> None:
         """Submit a request to delete specific messages (Non-blocking)."""
         self._queue.put(DeleteMessageRequest(query, parameters))

@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 from .typing import PktLogConfigT, PortConfigT
 
@@ -57,4 +56,4 @@ class EngineConfig:
     log_all_mqtt: bool = False
     evofw_flag: str | None = None
     use_regex: dict[str, dict[str, str]] = field(default_factory=dict)
-    app_context: Any | None = None
+    app_context: object | None = None

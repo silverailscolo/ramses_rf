@@ -66,7 +66,7 @@ class Child:
     Event Bus for topological updates.
     """
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # cooperative-inheritance passthrough
         self,
         *args: Any,
         parent: ParentInterface | None = None,
@@ -361,7 +361,7 @@ class Parent[ChildT: Child]:
     _htg_valve: ChildT | None = None
     _sensor: ChildT | None = None
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # cooperative-inheritance passthrough
         self, *args: Any, child_id: str | None = None, **kwargs: Any
     ) -> None:
         """Initialize the Parent relationship manager.

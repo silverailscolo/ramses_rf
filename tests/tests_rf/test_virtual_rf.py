@@ -167,8 +167,8 @@ async def assert_code_in_device_msgindex(
             )
 
         msgs = await dev.entity_state.get_message_log_flat()
-        msgz = await dev.entity_state.get_state_cache_nested()
-        return code in msgs or code in msgz
+        cached = await dev.entity_state.get_all_messages()
+        return code in msgs or code in {m.code for m in cached}
 
     for _ in range(int(max_sleep / ASSERT_CYCLE_TIME)):
         await asyncio.sleep(ASSERT_CYCLE_TIME)

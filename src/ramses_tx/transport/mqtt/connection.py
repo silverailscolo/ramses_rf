@@ -7,10 +7,11 @@ import asyncio
 import logging
 import threading
 from collections.abc import Callable
-from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from paho.mqtt import MQTTException, client as mqtt
+from paho.mqtt.properties import Properties
+from paho.mqtt.reasoncodes import ReasonCode
 
 try:
     from paho.mqtt.enums import CallbackAPIVersion
@@ -80,11 +81,12 @@ class MqttConnectionManager:
         self._current_reconnect_interval = self._reconnect_interval
         self._reconnect_task: asyncio.Task[None] | None = None
 
-        client_kwargs: dict[str, Any] = {"protocol": mqtt.MQTTv5}
         if CallbackAPIVersion is not None:
-            client_kwargs["callback_api_version"] = CallbackAPIVersion.VERSION2
-
-        self.client = mqtt.Client(**client_kwargs)
+            self.client = mqtt.Client(
+                CallbackAPIVersion.VERSION2, protocol=mqtt.MQTTv5
+            )
+        else:
+            self.client = mqtt.Client(protocol=mqtt.MQTTv5)
         self.client.on_connect = self._on_connect
         self.client.on_connect_fail = self._on_connect_fail
         self.client.on_disconnect = self._on_disconnect
@@ -171,20 +173,20 @@ class MqttConnectionManager:
     def _on_connect(
         self,
         client: mqtt.Client,
-        userdata: Any,
-        flags: dict[str, Any],
-        reason_code: Any,
-        properties: Any | None,
+        userdata: object,
+        flags: dict[str, object],
+        reason_code: ReasonCode,
+        properties: Properties | None,
     ) -> None:
         """Handle MQTT connection success."""
         self._connecting = False
 
         if reason_code.is_failure:
-            _LOGGER.error("MQTT connection failed: %s", reason_code.getName())
+            _LOGGER.error("MQTT connection failed: %s", reason_code.getName())  # type: ignore[no-untyped-call]  # untyped paho API
             self._schedule_reconnect()
             return
 
-        _LOGGER.info("MQTT connected: %s", reason_code.getName())
+        _LOGGER.info("MQTT connected: %s", reason_code.getName())  # type: ignore[no-untyped-call]  # untyped paho API
         self._current_reconnect_interval = self._reconnect_interval
 
         if self._reconnect_task:
@@ -237,7 +239,7 @@ class MqttConnectionManager:
     def _on_connect_fail(
         self,
         client: mqtt.Client,
-        userdata: Any,
+        userdata: object,
     ) -> None:
         """Handle MQTT connection failure."""
         _LOGGER.error("MQTT connection failed")
@@ -260,9 +262,9 @@ class MqttConnectionManager:
     def _on_disconnect(
         self,
         client: mqtt.Client,
-        userdata: Any,
-        *args: Any,
-        **kwargs: Any,
+        userdata: object,
+        *args: object,
+        **kwargs: object,
     ) -> None:
         """Handle MQTT disconnection."""
         reason_code = args[0] if len(args) >= 1 else None
@@ -285,7 +287,7 @@ class MqttConnectionManager:
             self._schedule_reconnect()
 
     def _on_message(
-        self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage
+        self, client: mqtt.Client, userdata: object, msg: mqtt.MQTTMessage
     ) -> None:
         """Dispatch received MQTT message."""
         if self._closing:

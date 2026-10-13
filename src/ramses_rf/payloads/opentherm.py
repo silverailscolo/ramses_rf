@@ -4,10 +4,13 @@ This module contains strongly-typed dataclass representations for OpenTherm brid
 and boiler gateway packet payloads.
 """
 
+from __future__ import annotations
+
 import struct
 from dataclasses import dataclass
-from typing import Any, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
+from ramses_rf.typing import PayloadT
 from ramses_tx.const import Code
 
 from ..const import (
@@ -33,6 +36,9 @@ from ..protocol.opentherm import (
 )
 from .base import PayloadBase
 from .registry import register_payload
+
+if TYPE_CHECKING:
+    from ramses_rf.messages.base import Message
 
 # ----------------------------------------------------------------------
 
@@ -77,7 +83,7 @@ class OpenThermMsgPayload(PayloadBase):
         msg_type: int = 0,
         raw_value: bytes = b"\x00\x00",
         opentherm_index: int | None = None,
-    ) -> "OpenThermMsg4BPayload | OpenThermMsg5BPayload":
+    ) -> OpenThermMsg4BPayload | OpenThermMsg5BPayload:
         """Construct OpenThermMsg payload variant dynamically from arguments.
 
         :param msg_id: OpenTherm Data ID byte (0-255).
@@ -126,13 +132,13 @@ class OpenThermMsgPayload(PayloadBase):
             header_byte |= 0x80
         return header_byte
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert OpenTherm message payload to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded OpenTherm message dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         m_id = getattr(self, "msg_id", 0)
         m_type = getattr(self, "msg_type", 0)
@@ -147,7 +153,7 @@ class OpenThermMsgPayload(PayloadBase):
 
         try:
             ot_type, ot_id, ot_val, ot_schema = decode_frame(frame_hex)
-            result: dict[str, Any] = {
+            result: PayloadT = {
                 SZ_MSG_ID: ot_id,
                 SZ_MSG_TYPE: str(ot_type),
                 SZ_MSG_NAME: ot_val.pop(SZ_MSG_NAME, None),
@@ -171,7 +177,7 @@ class OpenThermMsgPayload(PayloadBase):
     @classmethod
     def from_bytes(
         cls, raw_data: bytes
-    ) -> "OpenThermMsg4BPayload | OpenThermMsg5BPayload":
+    ) -> OpenThermMsg4BPayload | OpenThermMsg5BPayload:
         """Unpack binary payload, dispatching by length.
 
         :param raw_data: Raw binary byte string.
@@ -556,13 +562,13 @@ class OpenThermDiagnosticsPayload(PayloadBase):
         """
         return struct.pack(self._STRUCT_FMT, self.diagnostic_code, self.flags)
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert OpenTherm diagnostics payload to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded OpenTherm diagnostics dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {
             SZ_DIAGNOSTIC_CODE: self.diagnostic_code,
@@ -597,7 +603,7 @@ class OpenThermFaultFlagsPayload(PayloadBase):
         fault_code: int = 0,
         flags: int = 0,
         hdr: int | None = None,
-    ) -> "OpenThermFaultFlags2BPayload | OpenThermFaultFlags3BPayload":
+    ) -> OpenThermFaultFlags2BPayload | OpenThermFaultFlags3BPayload:
         """Construct OpenThermFaultFlags payload variant dynamically from arguments.
 
         :param fault_code: Fault code identifier byte (0-255).
@@ -615,13 +621,13 @@ class OpenThermFaultFlagsPayload(PayloadBase):
             )
         return OpenThermFaultFlags2BPayload(fault_code=fault_code, flags=flags)
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert OpenTherm fault flags payload to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded OpenTherm fault flags dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         f_code = getattr(self, "fault_code", 0)
         flg = getattr(self, "flags", 0)
@@ -881,13 +887,13 @@ class OpenThermParamsPayload(PayloadBase):
             self._STRUCT_FMT, self.parameter_index, self.parameter_value
         )
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert OpenTherm parameters payload to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded OpenTherm parameters dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         heat_demand = self.parameter_value / 200.0
         # 1.01 (raw uint8 202) represents 100% modulation in legacy OpenTherm packets
@@ -1070,13 +1076,13 @@ class OpenThermFrameExPayload(PayloadBase):
         """
         return struct.pack(self._STRUCT_FMT, self.frame_code, self.flags)
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert OpenTherm extended frame payload to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded OpenTherm extended frame dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         if self.frame_code == 0 and self.flags == 0:
             return {SZ_VALUE: 0}
@@ -1136,13 +1142,13 @@ class OpenThermBridgeStatusPayload(PayloadBase):
         """
         return struct.pack(self._STRUCT_FMT, self.status_code, self.flags)
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert OpenTherm bridge status payload to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded OpenTherm bridge status dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         if self.status_code == 0 and self.flags == 0:
             return {SZ_VALUE: 0}
@@ -1204,12 +1210,12 @@ class ReturnTempPayload(PayloadBase):
             t_raw = int(round(self.return_temp * 100.0))
         return struct.pack(self._STRUCT_FMT, 0, t_raw)
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert return temperature payload to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded temperature dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {SZ_TEMPERATURE: self.return_temp}
