@@ -46,6 +46,13 @@ INTERVAL_FAN_KEEP_ALIVE: Final[int] = 600  # 10 minutes
 # after startup rather than after a full daily interval
 # (https://github.com/ramses-rf/ramses_cc/issues/1242).
 INTERVAL_STARTUP_2E04: Final[int] = 60  # seconds after task registration
+# First-poll delay for every newly-registered task.  Without it a task
+# waits a full interval after (re)start, so hourly codes stay silent for
+# the first hour and daily codes for a day — polling looks dead after
+# every restart, and debugging restarts never reach the first poll
+# (ramses-rf/ramses_cc#1335).  Due tasks send serially with
+# POLL_INTER_CMD_GAP, so the startup burst self-paces.
+INTERVAL_STARTUP_POLL: Final[int] = 120  # seconds after task registration
 
 # Master default polling schedules table for all device classes.
 # Battery-powered devices (TRV, THM, DHW, REM, HUM) set intervals to None
@@ -369,7 +376,8 @@ class PollingManager:
                             device_id=device.id,
                             code=code,
                             interval=interval,
-                            next_due=now + td(seconds=interval),
+                            next_due=now
+                            + td(seconds=min(interval, INTERVAL_STARTUP_POLL)),
                             payload=payload,
                         )
                         self._wake_event.set()
@@ -393,7 +401,8 @@ class PollingManager:
                             device_id=device.id,
                             code=code,
                             interval=interval,
-                            next_due=now + td(seconds=interval),
+                            next_due=now
+                            + td(seconds=min(interval, INTERVAL_STARTUP_POLL)),
                             payload=payload,
                         )
                         self._wake_event.set()
@@ -415,7 +424,8 @@ class PollingManager:
                             device_id=device.id,
                             code=code,
                             interval=interval,
-                            next_due=now + td(seconds=interval),
+                            next_due=now
+                            + td(seconds=min(interval, INTERVAL_STARTUP_POLL)),
                             payload=payload,
                         )
                         self._wake_event.set()
@@ -437,7 +447,8 @@ class PollingManager:
                             device_id=device.id,
                             code=code,
                             interval=interval,
-                            next_due=now + td(seconds=interval),
+                            next_due=now
+                            + td(seconds=min(interval, INTERVAL_STARTUP_POLL)),
                             payload=payload,
                         )
                         self._wake_event.set()
@@ -464,7 +475,7 @@ class PollingManager:
                     delay = (
                         INTERVAL_STARTUP_2E04
                         if code == Code._2E04
-                        else interval
+                        else min(interval, INTERVAL_STARTUP_POLL)
                     )
                     self._tasks[dkey] = PollingTask(
                         device_id=device.id,

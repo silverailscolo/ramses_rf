@@ -17,6 +17,7 @@ from ramses_rf.pipeline.polling import (
     INTERVAL_DAILY,
     INTERVAL_FAN_KEEP_ALIVE,
     INTERVAL_STARTUP_2E04,
+    INTERVAL_STARTUP_POLL,
     POLL_REPLY_TIMEOUT,
     PollingManager,
 )
@@ -153,14 +154,19 @@ def test_polling_manager_interval_change_reschedules_next_due(
     task = poller._tasks[dkey]
     assert task.interval == INTERVAL_DAILY
     first_due = task.next_due
-    assert first_due > dt.now(UTC) + td(hours=12)
+    # first due is the early startup poll (INTERVAL_STARTUP_POLL), not the
+    # full daily interval (ramses-rf/ramses_cc#1335)
+    assert first_due <= dt.now(UTC) + td(seconds=INTERVAL_STARTUP_POLL + 5)
 
     # supports_10d0 confirmed by an RP|10D0 → 10D0 becomes keep-alive
     fan_dev.supports_10d0 = True
     poller.update_device_tasks(fan_dev)
 
     assert task.interval == INTERVAL_FAN_KEEP_ALIVE
-    assert task.next_due < first_due
+    # the new cadence is rescheduled from now — not left at the old due
+    assert task.next_due >= dt.now(UTC) + td(
+        seconds=INTERVAL_FAN_KEEP_ALIVE - 5
+    )
     assert task.next_due <= dt.now(UTC) + td(
         seconds=INTERVAL_FAN_KEEP_ALIVE + 5
     )
@@ -531,8 +537,9 @@ def test_polling_manager_2e04_first_poll_is_early(
 
     Cached 2E04 packets are no longer replayed on restore (issue
     ramses-rf/ramses_cc#1242), so the real system mode must be fetched
-    early instead of after a full daily interval.  Other codes keep
-    their regular first-poll delay.
+    early instead of after a full daily interval.  Other codes also
+    get an early first poll via INTERVAL_STARTUP_POLL (issue
+    ramses-rf/ramses_cc#1335), but 2E04 keeps its earlier deadline.
     """
     # ARRANGE
     poller = PollingManager(mock_gateway, shadow_mode=True)
@@ -552,7 +559,70 @@ def test_polling_manager_2e04_first_poll_is_early(
         <= tasks[Code._2E04].next_due
         <= after + td(seconds=INTERVAL_STARTUP_2E04)
     )
-    assert tasks[Code._10E0].next_due - now > td(hours=23)
+    assert tasks[Code._10E0].next_due <= after + td(
+        seconds=INTERVAL_STARTUP_POLL
+    )
+
+
+def test_polling_manager_first_poll_is_early(
+    mock_gateway: MagicMock,
+) -> None:
+    """Newly registered tasks first poll shortly after startup.
+
+    Without an early first poll, every task waits a full interval after
+    (re)start — hourly codes stay silent for an hour and daily codes for
+    a day, so polling looks dead after every restart
+    (ramses-rf/ramses_cc#1335).  Tasks whose interval is already below
+    INTERVAL_STARTUP_POLL keep their own interval.
+    """
+    # ARRANGE
+    poller = PollingManager(mock_gateway, shadow_mode=True)
+    ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
+    now = dt.now(UTC)
+
+    # ACT
+    poller.update_device_tasks(ctl_dev)
+    after = dt.now(UTC)
+
+    # ASSERT: hourly/daily codes are first due within the startup window
+    early_codes = (Code._10E0, Code._1F41, Code._313F, Code._1100)
+    tasks = {t.code: t for t in poller.get_scheduled_cmds()}
+    for code in early_codes:
+        assert code in tasks, f"missing task for {code}"
+        assert tasks[code].next_due <= after + td(
+            seconds=INTERVAL_STARTUP_POLL
+        ), f"{code} first poll not early: {tasks[code].next_due}"
+        assert tasks[code].next_due >= now
+
+
+def test_polling_manager_first_poll_early_for_otb_3220(
+    mock_gateway: MagicMock,
+) -> None:
+    """The OTB's per-Data-ID 3220 tasks also poll early after restart.
+
+    The reporter of ramses-rf/ramses_cc#1335 saw no 3220 traffic for the
+    first hour after every restart because all 14 subtasks waited a full
+    hourly interval.
+    """
+    # ARRANGE
+    poller = PollingManager(mock_gateway, shadow_mode=True)
+    otb_dev = MockDevice(mock_gateway, "10:111111", slug="OTB")
+    now = dt.now(UTC)
+
+    # ACT
+    poller.update_device_tasks(otb_dev)
+    after = dt.now(UTC)
+
+    # ASSERT
+    otb_3220 = [
+        t
+        for t in poller.get_scheduled_cmds()
+        if t.code == Code._3220 and t.device_id == "10:111111"
+    ]
+    assert len(otb_3220) == len(OPENTHERM_POLL_DATA_IDS)
+    for task in otb_3220:
+        assert task.next_due <= after + td(seconds=INTERVAL_STARTUP_POLL)
+        assert task.next_due >= now
 
 
 @pytest.mark.asyncio
