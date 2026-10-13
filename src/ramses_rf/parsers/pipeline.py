@@ -9,9 +9,10 @@ from __future__ import annotations
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ramses_rf.protocol.ramses import RQ_INDEX_COMPLEX
+from ramses_rf.typing import PayloadT
 from ramses_tx import exceptions as exc
 from ramses_tx.const import I_, RP, RQ, W_, Code
 from ramses_tx.helpers import hex_to_temp
@@ -27,7 +28,7 @@ _INFORM_DEV_MSG = (
 )
 
 
-def parser_heartbeat(payload: str, msg: Message) -> dict[str, Any]:
+def parser_heartbeat(payload: str, msg: Message) -> PayloadT:
     """Parse a 1-byte heartbeat packet (payload '00').
 
     :param payload: The raw hex payload (expected '00').
@@ -35,12 +36,12 @@ def parser_heartbeat(payload: str, msg: Message) -> dict[str, Any]:
     :param msg: The message object containing context.
     :type msg: Message
     :return: A dictionary identifying the packet as a heartbeat.
-    :rtype: dict[str, Any]
+    :rtype: PayloadT
     """
     return {"heartbeat": True}
 
 
-def parser_unknown(payload: str, msg: Message) -> dict[str, Any]:
+def parser_unknown(payload: str, msg: Message) -> PayloadT:
     """Apply a generic parser for unrecognized packet codes.
 
     :param payload: The raw hex payload
@@ -48,7 +49,7 @@ def parser_unknown(payload: str, msg: Message) -> dict[str, Any]:
     :param msg: The message object containing context
     :type msg: Message
     :return: A dictionary containing the raw payload and code information
-    :rtype: dict[str, Any]
+    :rtype: PayloadT
     """
     # TODO: it may be useful to generically search payloads for hex_ids
 
@@ -95,7 +96,7 @@ class PayloadDecoder(ABC):
     @abstractmethod
     def decode(
         self, msg: Message, payload_str: str, payload_len: int
-    ) -> dict[str, Any] | list[dict[str, Any]] | None:
+    ) -> PayloadT | list[PayloadT] | None:
         """Decode the payload. Returns None to bypass index merging.
 
         :param msg: The message context
@@ -105,7 +106,7 @@ class PayloadDecoder(ABC):
         :param payload_len: The payload length
         :type payload_len: int
         :return: The decoded result or None to trigger early bypass
-        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        :rtype: PayloadT | list[PayloadT] | None
         """
         if self._next_decoder:
             return self._next_decoder.decode(msg, payload_str, payload_len)
@@ -117,7 +118,7 @@ class HeartbeatDecoder(PayloadDecoder):
 
     def decode(
         self, msg: Message, payload_str: str, payload_len: int
-    ) -> dict[str, Any] | list[dict[str, Any]] | None:
+    ) -> PayloadT | list[PayloadT] | None:
         """Intercept and decode heartbeat payloads.
 
         :param msg: The message context
@@ -127,7 +128,7 @@ class HeartbeatDecoder(PayloadDecoder):
         :param payload_len: The payload length
         :type payload_len: int
         :return: The decoded result
-        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        :rtype: PayloadT | list[PayloadT] | None
         """
         if not msg._has_payload and (
             msg.verb == RQ and msg.code not in RQ_INDEX_COMPLEX
@@ -164,7 +165,7 @@ class StandardParserDecoder(PayloadDecoder):
 
     def decode(
         self, msg: Message, payload_str: str, payload_len: int
-    ) -> dict[str, Any] | list[dict[str, Any]] | None:
+    ) -> PayloadT | list[PayloadT] | None:
         """Route payload to the relevant parser function.
 
         :param msg: The message context
@@ -174,7 +175,7 @@ class StandardParserDecoder(PayloadDecoder):
         :param payload_len: The payload length
         :type payload_len: int
         :return: The decoded result
-        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        :rtype: PayloadT | list[PayloadT] | None
         """
         try:
             parser = get_parser(msg.code) or parser_unknown
@@ -210,13 +211,13 @@ class PayloadDecoderPipeline:
         self.head = HeartbeatDecoder()
         self.head.set_next(StandardParserDecoder())
 
-    def decode_payload(self, msg: Message) -> Any:
+    def decode_payload(self, msg: Message) -> PayloadT | list[PayloadT] | None:
         """Decode the raw payload using the decoder chain.
 
         :param msg: A Message object containing packet data
         :type msg: Message
         :return: A dict of key:value pairs or a list of such dicts
-        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        :rtype: PayloadT | list[PayloadT] | None
         """
         payload_str: str = msg._dto.raw_payload
         payload_len: int = msg.len

@@ -5,11 +5,10 @@ Vendor-specific behaviour for Itho Daalderop ventilation systems.
 
 from __future__ import annotations
 
-from typing import Any
-
 from ramses_rf.models import HvacState
 from ramses_rf.models.hvac_schemas import _22F1_MODE_ITHO, _22F1_MODE_MAX
 from ramses_rf.strategies.base import HvacStrategyBase
+from ramses_rf.typing import SchemaT
 from ramses_tx.const import Code
 
 
@@ -59,10 +58,10 @@ class IthoStrategy(HvacStrategyBase):
 
     def apply_quirk(
         self,
-        payload: dict[str, Any],
+        payload: SchemaT,
         current_state: HvacState | None,
         msg_code: Code | str,
-    ) -> dict[str, Any]:
+    ) -> SchemaT:
         """Apply Itho-specific quirks.
 
         Itho transmits actual fan speed in 31D9, but transmits 31DA
@@ -70,13 +69,13 @@ class IthoStrategy(HvacStrategyBase):
         state exists.
 
         :param payload: The flattened, canonical telemetry dictionary.
-        :type payload: dict[str, Any]
+        :type payload: SchemaT
         :param current_state: The existing Read-Model for the device.
         :type current_state: HvacState | None
         :param msg_code: The hex opcode of the incoming message.
         :type msg_code: Code | str
         :returns: The safely mutated telemetry dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         mutated = super().apply_quirk(payload, current_state, msg_code)
 

@@ -14,7 +14,7 @@ R = TypeVar("R")
 
 # A type alias for parser functions. They accept a payload string and a
 # Message object, returning various mappings or typed dictionaries.
-ParserFunc = Callable[..., Any]
+ParserFunc = Callable[..., Any]  # type: ignore[explicit-any]  # variadic heterogeneous parsers
 
 _PAYLOAD_PARSERS: dict[str, ParserFunc] = {}
 

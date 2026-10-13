@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import abc
 from collections.abc import Callable
-from typing import Any
 
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
+from ramses_rf.typing import SchemaT
 
 
 class TopologyHandler(abc.ABC):
@@ -17,8 +17,7 @@ class TopologyHandler(abc.ABC):
         self,
         emit_event_cb: Callable[[TopologyChangedEvent], None],
         enable_eavesdrop: bool = False,
-        device_class_lookup_cb: Callable[[str], dict[str, Any] | None]
-        | None = None,
+        device_class_lookup_cb: Callable[[str], SchemaT | None] | None = None,
     ) -> None:
         """Initialize the subsystem topology handler.
 
@@ -31,12 +30,12 @@ class TopologyHandler(abc.ABC):
             "locked") by device_id.  Used by handlers that need to
             detect contradictions between the known_list class and
             observed message patterns.
-        :type device_class_lookup_cb: Callable[[str], dict[str, Any] | None] | None
+        :type device_class_lookup_cb: Callable[[str], SchemaT | None] | None
         """
         self._emit: Callable[[TopologyChangedEvent], None] = emit_event_cb
         self._enable_eavesdrop: bool = enable_eavesdrop
         self._device_class_lookup_cb: (
-            Callable[[str], dict[str, Any] | None] | None
+            Callable[[str], SchemaT | None] | None
         ) = device_class_lookup_cb
 
     @abc.abstractmethod
@@ -49,7 +48,7 @@ class TopologyHandler(abc.ABC):
         ...
 
     @staticmethod
-    def _get_payloads(msg: Message) -> list[Any]:
+    def _get_payloads(msg: Message) -> list[object]:
         """Safely extract the array or standard dictionary payload.
 
         :param msg: The message containing payload data.
@@ -57,7 +56,7 @@ class TopologyHandler(abc.ABC):
         :returns: List of extracted payload dictionaries or items.
         :rtype: list[Any]
         """
-        raw: Any = msg.data
+        raw: object = msg.data
         if not raw:
             raw = getattr(msg, "payload", None)
         if isinstance(raw, dict):

@@ -7,22 +7,19 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from inspect import iscoroutinefunction
-from typing import Any, TypeAlias
+from typing import Any, TypeAlias, cast
 
-_SchemaT: TypeAlias = dict[str, Any]
+_SchemaT: TypeAlias = dict[  # type: ignore[explicit-any]  # heterogeneous schema
+    str, Any
+]
 
 
 def is_subset(inner: _SchemaT, outer: _SchemaT) -> bool:
     """Return True is one dict (or list) is a subset of another."""
 
-    def _is_subset(
-        a: dict[str, Any] | list[Any] | Any,
-        b: dict[str, Any] | list[Any] | Any,
-    ) -> bool:
-        if isinstance(a, dict):
-            return isinstance(b, dict) and all(
-                k in b and _is_subset(v, b[k]) for k, v in a.items()
-            )
+    def _is_subset(a: object, b: object) -> bool:
+        if isinstance(a, dict) and isinstance(b, dict):
+            return all(k in b and _is_subset(v, b[k]) for k, v in a.items())
         if isinstance(a, list):
             return isinstance(b, list) and all(
                 any(_is_subset(x, y) for y in b) for x in a
@@ -72,7 +69,7 @@ def deep_merge(
                 new_dst[key] = list(set(combined))  # will sort
             except TypeError:
                 # Unhashable elements (e.g. dicts) — dedup manually
-                seen: list[Any] = []
+                seen: list[object] = []
                 for item in combined:
                     if item not in seen:
                         seen.append(item)
@@ -92,7 +89,9 @@ def shrink(
     - falsey values
     """
 
-    def walk(node: Any) -> Any:
+    def walk(  # type: ignore[explicit-any]  # heterogeneous schema tree
+        node: Any,
+    ) -> Any:
         if isinstance(node, dict):
             return {
                 k: walk(v)
@@ -114,7 +113,7 @@ def shrink(
     return result
 
 
-def schedule_task(
+def schedule_task(  # type: ignore[explicit-any]  # variadic passthrough
     fnc: Awaitable[Any] | Callable[..., Any],
     *args: Any,
     delay: float | None = None,
@@ -123,20 +122,26 @@ def schedule_task(
 ) -> asyncio.Task[Any]:
     """Start a coro after delay seconds."""
 
-    async def execute_fnc(
-        fnc: Awaitable[Any] | Callable[..., Any], *args: Any, **kwargs: Any
+    async def execute_fnc(  # type: ignore[explicit-any]  # callable-or-awaitable passthrough
+        fnc: Awaitable[Any] | Callable[..., Any],
+        *args: Any,
+        **kwargs: Any,
     ) -> Any:
         if iscoroutinefunction(fnc):  # Awaitable, else Callable
-            return await fnc(*args, **kwargs)
-        return fnc(*args, **kwargs)  # type: ignore[operator]
+            return await cast(  # type: ignore[explicit-any]  # heterogeneous callable
+                Callable[..., Awaitable[object]], fnc
+            )(*args, **kwargs)
+        return cast(  # type: ignore[explicit-any]  # heterogeneous callable
+            Callable[..., object], fnc
+        )(*args, **kwargs)
 
-    async def schedule_fnc(
+    async def schedule_fnc(  # type: ignore[explicit-any]  # callable-or-awaitable passthrough
         fnc: Awaitable[Any] | Callable[..., Any],
         delay: float | None,
         period: float | None,
         *args: Any,
         **kwargs: Any,
-    ) -> Any:
+    ) -> None:
         if delay:
             await asyncio.sleep(delay)
 

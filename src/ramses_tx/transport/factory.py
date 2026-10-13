@@ -31,7 +31,7 @@ _DEFAULT_TIMEOUT_POOL: Final[float] = 10.0
 RamsesTransportT: TypeAlias = TransportInterface
 
 
-async def transport_factory(
+async def transport_factory(  # type: ignore[explicit-any]  # variadic factory kwargs
     protocol: RamsesProtocolT,
     /,
     *,

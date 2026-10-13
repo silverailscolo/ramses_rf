@@ -7,9 +7,11 @@ into legacy dictionary formats for parity testing and backward compatibility.
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from ramses_rf.typing import PayloadT
+
     from .base import PayloadBase
 
 
@@ -48,9 +50,7 @@ _FIELD_TO_LEGACY_KEY: dict[str, str] = {
 }
 
 
-def payload_to_dict(
-    payload: PayloadBase, *, legacy: bool = False
-) -> dict[str, Any]:
+def payload_to_dict(payload: PayloadBase, *, legacy: bool = False) -> PayloadT:
     """Convert a PayloadBase instance into a dictionary structure.
 
     :param payload: The payload dataclass instance to convert.

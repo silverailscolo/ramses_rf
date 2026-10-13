@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command
@@ -149,7 +149,7 @@ class CommandDispatcher:
         )
         task = loop.create_task(coro)
 
-        def _clear_exc(fut: asyncio.Task[Any]) -> None:
+        def _clear_exc(fut: asyncio.Task[object]) -> None:
             if not fut.cancelled() and fut.exception():
                 _LOGGER.debug(
                     "Background intent task failed: %s", fut.exception()

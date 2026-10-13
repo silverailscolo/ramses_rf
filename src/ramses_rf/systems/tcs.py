@@ -53,6 +53,7 @@ from ramses_rf.schemas import (
     SZ_UFH_SYSTEM,
 )
 from ramses_rf.topology import Parent
+from ramses_rf.typing import SchemaT
 from ramses_tx import DeviceIdT, Priority
 from ramses_tx.const import DEFAULT_MAX_ZONES
 from ramses_tx.typing import PayDictT
@@ -126,7 +127,7 @@ class SystemBase(Parent[Device], Entity):  # 3B00 (multi-relay)
     # Populated by the CQRS state projector (issue 1102).  Declared here
     # because tpi_params property is on SystemBase but the dict is only
     # initialised in System.__init__.
-    _tpi_params: dict[str, Any] = {}
+    _tpi_params: SchemaT = {}
 
     def __init__(self, controller: Controller) -> None:
         """Initialise the TCS base class.
@@ -230,13 +231,13 @@ class SystemBase(Parent[Device], Entity):  # 3B00 (multi-relay)
             return None
         return mode == ThermalMode.COOL
 
-    async def schema(self) -> dict[str, Any]:
+    async def schema(self) -> SchemaT:
         """Return the system's schema.
 
         :returns: The schema dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
-        schema: dict[str, Any] = {SZ_SYSTEM: {}}
+        schema: SchemaT = {SZ_SYSTEM: {}}
 
         schema[SZ_SYSTEM][SZ_APPLIANCE_CONTROL] = (
             self.appliance_control.id if self.appliance_control else None
@@ -253,14 +254,14 @@ class SystemBase(Parent[Device], Entity):  # 3B00 (multi-relay)
 
         return schema
 
-    async def _schema_min(self) -> dict[str, Any]:
+    async def _schema_min(self) -> SchemaT:
         """Return the system's minimalised schema.
 
         :returns: The minimalised schema dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
-        schema: dict[str, Any] = await self.schema()
-        result: dict[str, Any] = {}
+        schema: SchemaT = await self.schema()
+        result: SchemaT = {}
 
         try:
             app_cntrl = schema[SZ_SYSTEM][SZ_APPLIANCE_CONTROL]
@@ -299,25 +300,25 @@ class SystemBase(Parent[Device], Entity):  # 3B00 (multi-relay)
 
         return result  # TODO: check against vol schema
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return the system's configuration.
 
         :returns: The configuration parameters dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
-        params: dict[str, Any] = {SZ_SYSTEM: {}}
+        params: SchemaT = {SZ_SYSTEM: {}}
         params[SZ_SYSTEM]["tpi_params"] = await self.entity_state.get_value(
             Code._1100
         )
         return params
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the system's current state.
 
         :returns: The state and status dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
-        status: dict[str, Any] = {SZ_SYSTEM: {}}
+        status: SchemaT = {SZ_SYSTEM: {}}
         status[SZ_SYSTEM]["heat_demand"] = await self.heat_demand()
 
         status[SZ_DEVICES] = {
@@ -331,7 +332,9 @@ class SystemBase(Parent[Device], Entity):  # 3B00 (multi-relay)
 class MultiZone(SystemBase):  # 0005 (+/- 000C?)
     """A system variant supporting multiple heating zones."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(  # type: ignore[explicit-any]  # passthrough to SystemBase
+        self, *args: Any, **kwargs: Any
+    ) -> None:
         """Initialise a multi-zone system."""
         super().__init__(*args, **kwargs)
 
@@ -341,7 +344,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             self._gateway.config, SZ_MAX_ZONES, DEFAULT_MAX_ZONES
         )
 
-    def get_htg_zone(
+    def get_htg_zone(  # type: ignore[explicit-any]  # schema-tree kwargs
         self, zone_index: str, *, msg: Message | None = None, **schema: Any
     ) -> Zone:
         """Return a heating zone, create it if required.
@@ -379,11 +382,11 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
 
         return zon
 
-    async def schema(self) -> dict[str, Any]:
+    async def schema(self) -> SchemaT:
         """Return the multi-zone system schema.
 
         :returns: The schema dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         base_schema = await super().schema()
         return {
@@ -391,11 +394,11 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             SZ_ZONES: {z.index: await z.schema() for z in sorted(self.zones)},
         }
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return the multi-zone system parameters.
 
         :returns: The parameters dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         base_params = await super().params()
         return {
@@ -403,11 +406,11 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             SZ_ZONES: {z.index: await z.params() for z in sorted(self.zones)},
         }
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the multi-zone system status.
 
         :returns: The status dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         base_status = await super().status()
         return {
@@ -419,7 +422,9 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
 class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
     """A system variant managing schedule synchronisation."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(  # type: ignore[explicit-any]  # passthrough to SystemBase
+        self, *args: Any, **kwargs: Any
+    ) -> None:
         """Initialise schedule synchronisation."""
         super().__init__(*args, **kwargs)
 
@@ -492,11 +497,11 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
             Code._0006, key=SZ_CHANGE_COUNTER
         )
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the schedule status.
 
         :returns: The schedule status dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         base_status = await super().status()
         return {
@@ -516,11 +521,11 @@ class Language(SystemBase):  # 0100
         """
         return self.system_state.language
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return the language parameters.
 
         :returns: The language parameters dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         params = await super().params()
         params[SZ_SYSTEM][SZ_LANGUAGE] = await self.language()
@@ -530,7 +535,9 @@ class Language(SystemBase):  # 0100
 class Logbook(SystemBase):  # 0418
     """A system variant supporting fault logbook retrieval."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(  # type: ignore[explicit-any]  # passthrough to SystemBase
+        self, *args: Any, **kwargs: Any
+    ) -> None:
         """Initialise the fault logbook."""
         super().__init__(*args, **kwargs)
 
@@ -591,11 +598,11 @@ class Logbook(SystemBase):  # 0418
             return None
         return str(self._faultlog.latest_fault)
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the logbook status.
 
         :returns: The logbook status dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         base_status = await super().status()
         return {
@@ -613,14 +620,16 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
     MAX_SETPOINT = 85.0
     DEFAULT_SETPOINT = 50.0
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(  # type: ignore[explicit-any]  # passthrough to SystemBase
+        self, *args: Any, **kwargs: Any
+    ) -> None:
         """Initialise the StoredHw system."""
         super().__init__(*args, **kwargs)
         self._dhw: DhwZone | None = None
 
     # public: declared on the _HasZones runtime_checkable Protocol
     # (topology.py) — renaming breaks isinstance() protocol checks
-    def get_dhw_zone(
+    def get_dhw_zone(  # type: ignore[explicit-any]  # schema-tree kwargs
         self, *, msg: Message | None = None, **schema: Any
     ) -> DhwZone:
         """Return a DHW zone, create it if required.
@@ -699,7 +708,7 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
         """Return the heating valve device."""
         return self._dhw.heating_valve if self._dhw else None
 
-    async def schema(self) -> dict[str, Any]:
+    async def schema(self) -> SchemaT:
         """Return the DHW system schema."""
         base_schema = await super().schema()
         return {
@@ -707,7 +716,7 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
             SZ_DHW_SYSTEM: await self._dhw.schema() if self._dhw else {},
         }
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return the DHW system parameters."""
         base_params = await super().params()
         return {
@@ -715,7 +724,7 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
             SZ_DHW_SYSTEM: await self._dhw.params() if self._dhw else {},
         }
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the DHW system status."""
         base_status = await super().status()
         return {
@@ -727,7 +736,7 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
 class SystemMode(SystemBase):  # 2E04
     """A system variant managing the overall system mode."""
 
-    async def system_mode(self) -> dict[str, Any] | None:  # 2E04
+    async def system_mode(self) -> SchemaT | None:  # 2E04
         """Return the system mode from Hot State RAM.
 
         This is a pure read — it does **not** dispatch any commands.
@@ -737,7 +746,7 @@ class SystemMode(SystemBase):  # 2E04
 
         :returns: A dictionary with system mode and until time, or
             ``None`` if the state has not yet been hydrated.
-        :rtype: dict[str, Any] | None
+        :rtype: SchemaT | None
         """
         if self.system_state.system_mode is None:
             return None
@@ -784,7 +793,7 @@ class SystemMode(SystemBase):  # 2E04
         """
         return await self.set_mode(SYS_MODE_MAP.AUTO_WITH_RESET)
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return the system mode parameters."""
         params = await super().params()
         params[SZ_SYSTEM][SZ_SYSTEM_MODE] = await self.system_mode()
@@ -835,7 +844,7 @@ class UfHeating(SystemBase):
         """Return a sorted list of underfloor heating controllers."""
         return sorted([d for d in self.childs if isinstance(d, UfhController)])
 
-    async def schema(self) -> dict[str, Any]:
+    async def schema(self) -> SchemaT:
         """Return the underfloor heating schema."""
         base_schema = await super().schema()
         return {
@@ -843,7 +852,7 @@ class UfHeating(SystemBase):
             SZ_UFH_SYSTEM: {d.id: await d.schema() for d in self._ufh_ctls()},
         }
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return the underfloor heating parameters."""
         base_params = await super().params()
         return {
@@ -851,7 +860,7 @@ class UfHeating(SystemBase):
             SZ_UFH_SYSTEM: {d.id: await d.params() for d in self._ufh_ctls()},
         }
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the underfloor heating status."""
         base_status = await super().status()
         return {
@@ -865,7 +874,9 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
 
     _SLUG: str = SYS_KLASS.SYS
 
-    def __init__(self, controller: Controller, **kwargs: Any) -> None:
+    def __init__(  # type: ignore[explicit-any]  # passthrough kwargs
+        self, controller: Controller, **kwargs: Any
+    ) -> None:
         """Initialise the TCS system.
 
         :param controller: The central controller device.
@@ -875,18 +886,20 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         """
         super().__init__(controller, **kwargs)
 
-        self._heat_demands: dict[str, Any] = {}
-        self._relay_demands: dict[str, Any] = {}
-        self._relay_failsafes: dict[str, Any] = {}
-        self._tpi_params: dict[str, Any] = {}  # 1100, keyed by domain_id
+        self._heat_demands: SchemaT = {}
+        self._relay_demands: SchemaT = {}
+        self._relay_failsafes: SchemaT = {}
+        self._tpi_params: SchemaT = {}  # 1100, keyed by domain_id
 
-    def _update_schema(self, **schema: Any) -> None:
+    def _update_schema(  # type: ignore[explicit-any]  # schema-tree kwargs
+        self, **schema: Any
+    ) -> None:
         """Update a CH/DHW system with new schema attrs.
 
         Raise an exception if the new schema is not a superset of the
         existing schema.
         """
-        _schema: dict[str, Any]
+        _schema: SchemaT
         # Use keep_hints=True so that _name in zone entries survives
         # shrink() and reaches Zone._update_schema for hydration
         # (ramses-rf/ramses_cc#919: zone names lost after 24h).
@@ -912,14 +925,14 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
                     f"SUPPRESSED in System._update_schema (app_cntrl): {err}"
                 )
 
-        _dhw_schema: Any = schema.get(SZ_DHW_SYSTEM)
+        _dhw_schema = schema.get(SZ_DHW_SYSTEM)
         if _dhw_schema:
             self.get_dhw_zone(**_dhw_schema)  # self._dhw = ...
 
         if not isinstance(self, MultiZone):
             return
 
-        _zones_schema: Any = schema.get(SZ_ZONES)
+        _zones_schema = schema.get(SZ_ZONES)
         if _zones_schema:
             [
                 self.get_htg_zone(zone_index, **s)
@@ -927,7 +940,7 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
             ]
 
     @classmethod
-    def create_from_schema(
+    def create_from_schema(  # type: ignore[explicit-any]  # schema-tree kwargs
         cls, controller: Controller, **schema: Any
     ) -> System:
         """Create a CH/DHW system for a CTL and set its schema attrs.
@@ -974,7 +987,7 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         }
 
     @property
-    def relay_demands(self) -> dict[str, Any] | None:  # 0008
+    def relay_demands(self) -> SchemaT | None:  # 0008
         """Return the current relay demands per domain."""
         # FC: 00-C8, F9: 00-C8, FA: 00 or C8 only (01: all 3, 02: FC/FA only)
         if not self._relay_demands:
@@ -985,17 +998,17 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         }
 
     @property
-    def relay_failsafes(self) -> dict[str, Any] | None:  # 0009
+    def relay_failsafes(self) -> SchemaT | None:  # 0009
         """Return the current relay failsafes per domain."""
         if not self._relay_failsafes:
             return None
         return {}  # FIXME: failsafe_enabled
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the system's current state.
 
         :returns: The status dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         status = await super().status()
         # assert SZ_SYSTEM in status  # TODO: removeme
@@ -1068,7 +1081,7 @@ class Sundial(Evohome):
 SYS_CLASS_BY_SLUG: dict[str, type[System]] = class_by_attr(__name__, "_SLUG")
 
 
-def system_factory(
+def system_factory(  # type: ignore[explicit-any]  # schema-tree kwargs
     controller: Controller, *, msg: Message | None = None, **schema: Any
 ) -> System:
     """Return the system class for a given controller/schema.
@@ -1083,7 +1096,7 @@ def system_factory(
     :rtype: System
     """
 
-    def best_tcs_class(
+    def best_tcs_class(  # type: ignore[explicit-any]  # schema-tree kwargs
         controller_address: Address,
         *,
         msg: Message | None = None,

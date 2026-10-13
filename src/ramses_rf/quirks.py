@@ -25,12 +25,11 @@ KNOWN EXCEPTIONS:
 
 from __future__ import annotations
 
-from typing import Any
-
 from ramses_rf.models import HvacState
 from ramses_rf.strategies import HvacStrategy
 from ramses_rf.strategies.climarad import ClimaRadStrategy
 from ramses_rf.strategies.itho import IthoStrategy
+from ramses_rf.typing import SchemaT
 from ramses_tx.const import Code
 
 _CLIMARAD = ClimaRadStrategy()
@@ -38,11 +37,11 @@ _ITHO = IthoStrategy()
 
 
 def apply_hvac_quirks(
-    payload: dict[str, Any],
+    payload: SchemaT,
     current_state: HvacState | None,
     msg_code: Code | str,
     strategy: HvacStrategy | None = None,
-) -> dict[str, Any]:
+) -> SchemaT:
     """Resolve stateful FSM conflicts and structural anomalies for HVAC packets.
 
     Stateful quirks cannot be resolved by stateless parsers. They must be
@@ -53,7 +52,7 @@ def apply_hvac_quirks(
     are applied. When provided, only that strategy's quirks are applied.
 
     :param payload: The flattened, canonical telemetry dictionary.
-    :type payload: dict[str, Any]
+    :type payload: SchemaT
     :param current_state: The existing Read-Model for the device, if any.
     :type current_state: HvacState | None
     :param msg_code: The hex opcode of the incoming message.
@@ -61,7 +60,7 @@ def apply_hvac_quirks(
     :param strategy: The selected vendor strategy, if known.
     :type strategy: HvacStrategy | None
     :return: The safely mutated telemetry dictionary.
-    :rtype: dict[str, Any]
+    :rtype: SchemaT
     """
     if strategy:
         return strategy.apply_quirk(payload, current_state, msg_code)

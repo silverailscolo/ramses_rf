@@ -11,7 +11,6 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime as dt
-from typing import Any
 
 from ..const import DEFAULT_DISABLE_QOS
 from ..helpers import dt_now
@@ -60,7 +59,7 @@ def protocol_factory(
     )
 
 
-async def create_stack(
+async def create_stack(  # type: ignore[explicit-any]  # variadic factory kwargs
     msg_handler: MsgHandlerT,
     /,
     *,
@@ -72,7 +71,7 @@ async def create_stack(
     port_config: PortConfigT | None = None,
     packet_log: str | None = None,
     packet_dict: dict[str, str] | None = None,
-    extra: dict[str, Any] | None = None,
+    extra: dict[str, object] | None = None,
     loop: asyncio.AbstractEventLoop | None = None,
     disable_qos: bool | None = DEFAULT_DISABLE_QOS,
     enforce_include_list: bool = False,

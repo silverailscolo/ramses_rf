@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import contextlib
 from datetime import timedelta as td
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 import ramses_rf.exceptions as exc
 from ramses_rf.const import (
@@ -25,6 +25,7 @@ from ramses_rf.protocol.ramses import (
     CODES_ONLY_FROM_CTL,
     HVAC_KLASS_BY_VC_PAIR,
 )
+from ramses_rf.typing import SchemaT
 from ramses_tx import Code
 from ramses_tx.address import HGI_DEV_ADDR
 from ramses_tx.const import I_, RQ
@@ -54,9 +55,9 @@ class EavesdropEngine:
         if registry:
             registry.handle_topology_event(event)
 
-    def _get_payloads(self, msg: Message) -> list[Any]:
+    def _get_payloads(self, msg: Message) -> list[object]:
         """Safely extract the array or standard dictionary payload."""
-        raw: Any = getattr(msg, "payload", getattr(msg, "data", {}))
+        raw: object = getattr(msg, "payload", getattr(msg, "data", {}))
         if isinstance(raw, dict):
             result = raw.get("_array", [raw])
             return result if isinstance(result, list) else [result]
@@ -213,7 +214,7 @@ class EavesdropEngine:
                 if zone_index is None and domain_id is None:
                     continue
 
-                metadata: dict[str, Any] = {}
+                metadata: SchemaT = {}
 
                 is_actuator = getattr(msg.src, "type", None) in (
                     "04",
@@ -560,7 +561,7 @@ class EavesdropEngine:
             )
 
     async def _eavesdrop_from_controller_broadcast(
-        self, tcs: Any, msg: Message, prev: Message | None
+        self, tcs: Evohome, msg: Message, prev: Message | None
     ) -> None:
         """Correlate recently heard TRV temperatures against a new zone array."""
         if prev is None:
@@ -685,7 +686,7 @@ class EavesdropEngine:
                 )
 
     async def _eavesdrop_from_trv_broadcast(
-        self, tcs: Any, msg: Message
+        self, tcs: Evohome, msg: Message
     ) -> None:
         """Correlate a new TRV temperature broadcast against known zones.
 

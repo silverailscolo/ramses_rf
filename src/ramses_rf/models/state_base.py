@@ -5,10 +5,9 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime as dt
-from typing import Any
 
 from ramses_rf.enums import TopologyAction
-from ramses_rf.typing import DeviceIdT, PollingIntervalsT
+from ramses_rf.typing import DeviceIdT, PayloadT, PollingIntervalsT, SchemaT
 
 
 @dataclass
@@ -23,11 +22,11 @@ class DeviceTraits:
     is_battery: bool | None = None
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> DeviceTraits:
+    def from_dict(cls, data: SchemaT) -> DeviceTraits:
         """Construct DeviceTraits safely from a dynamically parsed dictionary.
 
         :param data: The raw dictionary containing device trait key-values.
-        :type data: dict[str, Any]
+        :type data: SchemaT
         :returns: A new DeviceTraits instance populated with trait values.
         :rtype: DeviceTraits
         """
@@ -40,16 +39,16 @@ class DeviceTraits:
             is_battery=data.get("is_battery"),
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> SchemaT:
         """Serialize back to a dictionary.
 
         Useful for bridging the boundary into legacy methods expecting
         **kwargs.
 
         :returns: A dictionary representing the device traits.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
-        result: dict[str, Any] = {}
+        result: SchemaT = {}
         if self.device_class is not None:
             result["class"] = getattr(
                 self.device_class, "value", self.device_class
@@ -101,7 +100,9 @@ class TopologyChangedEvent:
 
     # Flexible domain-specific metadata (e.g., {"zone_index": "01",
     # "is_sensor": True})
-    metadata: dict[str, str | int | float | bool] = field(default_factory=dict)
+    metadata: dict[str, str | int | float | bool | PayloadT] = field(
+        default_factory=dict
+    )
 
     # The Tracing Triad (Observability & Debugging)
     event_id: uuid.UUID = field(default_factory=uuid.uuid4)
@@ -152,7 +153,7 @@ class StateUpdatedEvent:
     """
 
     entity_id: str
-    state: Any
+    state: object
     event_id: uuid.UUID = field(default_factory=uuid.uuid4)
     correlation_id: uuid.UUID = field(default_factory=uuid.uuid4)
     causation_id: uuid.UUID = field(default_factory=uuid.uuid4)

@@ -66,6 +66,7 @@ from ramses_rf.models import (
     OpenThermStateDTO,
     OpenThermTemperatures,
 )
+from ramses_rf.typing import SchemaT
 from ramses_tx.const import FC
 from ramses_tx.typing import PayDictT
 
@@ -91,7 +92,7 @@ class OtbGateway(HeatDemand):  # OTB (10): 3220 (22D9, others)
 
     OPENTHERM_STATE: Final = SZ_OPENTHERM_STATE
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         """Initialize the OpenTherm Bridge device software twin.
@@ -333,11 +334,11 @@ class OtbGateway(HeatDemand):  # OTB (10): 3220 (22D9, others)
         """Return whether the boiler reports a water over-temperature."""
         return self.opentherm_state.faults.water_over_temperature
 
-    async def opentherm_schema(self) -> dict[str, Any]:
+    async def opentherm_schema(self) -> SchemaT:
         """Return OpenTherm topology configuration schema."""
         return {}
 
-    async def opentherm_counters(self) -> dict[str, Any]:  # all are U16
+    async def opentherm_counters(self) -> SchemaT:  # all are U16
         """Return OpenTherm diagnostic runtime counters."""
         return {
             SZ_BURNER_HOURS: self.opentherm_state.counters.burner_hours,
@@ -354,7 +355,7 @@ class OtbGateway(HeatDemand):  # OTB (10): 3220 (22D9, others)
 
     async def opentherm_params(
         self,
-    ) -> dict[str, Any]:  # F8_8, U8, {"hb": S8, "lb": S8}
+    ) -> SchemaT:  # F8_8, U8, {"hb": S8, "lb": S8}
         """Return OpenTherm configuration parameter dictionary."""
         return {}
 
@@ -368,7 +369,7 @@ class OtbGateway(HeatDemand):  # OTB (10): 3220 (22D9, others)
             SZ_MAX_REL_MODULATION: await self.max_rel_modulation(),
         }
 
-    async def traits(self) -> dict[str, Any]:
+    async def traits(self) -> SchemaT:
         """Return device traits dictionary."""
         return await super().traits()
 
@@ -396,7 +397,7 @@ class OtbGateway(HeatDemand):  # OTB (10): 3220 (22D9, others)
             last_updated=state.last_updated,
         )
 
-    async def schema(self) -> dict[str, Any]:
+    async def schema(self) -> SchemaT:
         """Return combined device configuration schema."""
         base_schema = await super().schema()
         return {
@@ -405,7 +406,7 @@ class OtbGateway(HeatDemand):  # OTB (10): 3220 (22D9, others)
             SZ_RAMSES_II_SCHEMA: await self.ramses_schema(),
         }
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return combined device parameters dictionary."""
         base_params = await super().params()
         return {
@@ -414,7 +415,7 @@ class OtbGateway(HeatDemand):  # OTB (10): 3220 (22D9, others)
             SZ_RAMSES_II_PARAMS: await self.ramses_params(),
         }
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return combined operational status dictionary."""
         base_status = await super().status()
         return {

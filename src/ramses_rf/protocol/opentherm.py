@@ -5,8 +5,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from enum import EnumCheck, IntEnum, StrEnum, verify
-from typing import Any, Final, TypeAlias
+from typing import Final, TypeAlias
 
+from ramses_rf.typing import SchemaT
 from ramses_tx.const import Code
 
 _DataValueT: TypeAlias = float | int | list[int] | str | None
@@ -15,7 +16,7 @@ _MsgStrT: TypeAlias = str
 
 
 _FlagsSchemaT: TypeAlias = dict[int, dict[str, str]]
-_OtMsgSchemaT: TypeAlias = dict[str, Any]
+_OtMsgSchemaT: TypeAlias = SchemaT
 
 
 class OtDataId(IntEnum):
@@ -1267,7 +1268,7 @@ def _msg_value(value_sequence: str, value_type: str) -> _DataValueT:
             bytes.fromhex(high_byte + low_byte), "big", signed=True
         )
 
-    DATA_TYPES: dict[str, Callable[..., _DataValueT]] = {
+    DATA_TYPES: dict[str, Callable[..., _DataValueT]] = {  # type: ignore[explicit-any]  # variadic converters
         FLAG8: flag8,
         U8: u8,
         S8: s8,
@@ -1306,7 +1307,7 @@ _INVALID_F8_8_VALUES: Final[dict[int, frozenset[str]]] = {
 
 def decode_frame(
     frame: _FrameT,
-) -> tuple[OtMsgType, OtDataId, dict[str, Any], _OtMsgSchemaT]:
+) -> tuple[OtMsgType, OtDataId, SchemaT, _OtMsgSchemaT]:
     """Decode an 8-character hexadecimal OpenTherm protocol frame.
 
     Validates frame integrity including length, even parity on bit 31,
@@ -1319,7 +1320,7 @@ def decode_frame(
     :param frame: 8-character hexadecimal OpenTherm frame string.
     :type frame: str
     :returns: A 4-tuple of (msg_type, data_id, data_value_dict, msg_schema).
-    :rtype: tuple[OtMsgType, OtDataId, dict[str, Any], dict[str, Any]]
+    :rtype: tuple[OtMsgType, OtDataId, SchemaT, SchemaT]
     :raises TypeError: If frame is not a string or has length != 8.
     :raises ValueError: If parity check fails or spare bits are non-zero.
     :raises KeyError: If Data-ID is not recognized in the OpenTherm schema.

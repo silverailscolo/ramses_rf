@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from ramses_rf.models import HvacState
 from ramses_rf.models.hvac_schemas import _22F1_MODE_MAX, _22F1_MODE_ORCON
 from ramses_rf.strategies.base import HvacStrategyBase
+from ramses_rf.typing import SchemaT
 from ramses_tx.const import Code, IndexT
 
 # The generic 3-byte 31D9 parser decodes the speed byte with the
@@ -115,10 +114,10 @@ class OrconStrategy(HvacStrategyBase):
 
     def apply_quirk(
         self,
-        payload: dict[str, Any],
+        payload: SchemaT,
         current_state: HvacState | None,
         msg_code: Code | str,
-    ) -> dict[str, Any]:
+    ) -> SchemaT:
         """Apply Orcon-specific quirks.
 
         QUIRK: 3-byte 31D9 mode decode (ramses-rf/ramses_cc#1231).  Short
@@ -135,13 +134,13 @@ class OrconStrategy(HvacStrategyBase):
         the base quirk nulls them.
 
         :param payload: The flattened, canonical telemetry dictionary.
-        :type payload: dict[str, Any]
+        :type payload: SchemaT
         :param current_state: The existing Read-Model for the device.
         :type current_state: HvacState | None
         :param msg_code: The hex opcode of the incoming message.
         :type msg_code: Code | str
         :returns: The safely mutated telemetry dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         mutated = dict(payload)
         if msg_code == Code._31D9 and "exhaust_fan_speed" in mutated:

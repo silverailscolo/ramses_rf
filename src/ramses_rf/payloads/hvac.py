@@ -4,10 +4,12 @@ This module contains strongly-typed dataclass representations for HVAC,
 ventilation, air quality, and fan status packet payloads.
 """
 
+from __future__ import annotations
+
 import struct
 from dataclasses import dataclass
 from datetime import timedelta as td
-from typing import Any, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from ramses_rf.const import (
     SZ_AIR_QUALITY,
@@ -44,9 +46,13 @@ from ramses_rf.protocol.ramses import (
     _2411_PARAMS_SCHEMA,
     SZ_DESCRIPTION,
 )
+from ramses_rf.typing import PayloadT
 
 from .base import PayloadBase
 from .registry import register_payload
+
+if TYPE_CHECKING:
+    from ramses_rf.messages.base import Message
 
 # CO2 sensor fault encoding (high byte of uint16 value).
 # Matches the fault scheme used by 31DA's _parse_val for the same
@@ -176,15 +182,15 @@ class SpiderThermostatPayload(PayloadBase):
             self._STRUCT_FMT, 0, 128, t_raw, sp_min_raw, sp_max_raw
         )
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert Spider thermostat payload to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded Spider thermostat dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
-        result: dict[str, Any] = {
+        result: PayloadT = {
             "temperature": self.temp,
             "setpoint_bounds": (self.setpoint_min, self.setpoint_max),
         }
@@ -296,17 +302,17 @@ class HvacFilterChangePayload(PayloadBase):
             b"\x00\x00",
         )
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert filter change payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded filter change dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         if self.reset_counter:
             return {"reset_counter": True}
-        result: dict[str, Any] = {}
+        result: PayloadT = {}
         if self.remaining_days is not None:
             result["days_remaining"] = self.remaining_days
         if self.days_lifetime is not None:
@@ -448,7 +454,7 @@ class Co2Payload(PayloadBase):
         co2_level: int | None = None,
         domain_index: int | None = None,
         co2_level_fault: str | None = None,
-    ) -> "Co22BPayload | Co23BPayload":
+    ) -> Co22BPayload | Co23BPayload:
         """Construct Co2 payload variant dynamically from arguments."""
         if domain_index is not None:
             return Co23BPayload(
@@ -460,9 +466,9 @@ class Co2Payload(PayloadBase):
             co2_level=co2_level, co2_level_fault=co2_level_fault
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert CO2 payload to legacy dictionary layout."""
-        result: dict[str, Any] = {
+        result: PayloadT = {
             "co2_level": getattr(self, "co2_level", None),
         }
         fault = getattr(self, "co2_level_fault", None)
@@ -471,7 +477,7 @@ class Co2Payload(PayloadBase):
         return result
 
     @classmethod
-    def from_bytes(cls, raw_data: bytes) -> "Co2Payload":
+    def from_bytes(cls, raw_data: bytes) -> Co2Payload:
         """Unpack binary payload, dispatching by length."""
         if len(raw_data) < 2:
             raise ValueError(
@@ -640,7 +646,7 @@ class RelativeHumidityPayload(PayloadBase):
     @classmethod
     def from_bytes(
         cls, raw_data: bytes
-    ) -> "RelativeHumidityPayload | list[RelativeHumidityPayload]":
+    ) -> RelativeHumidityPayload | list[RelativeHumidityPayload]:
         """Unpack relative humidity payload, dispatching by length."""
         if not raw_data:
             raise ValueError("Payload data cannot be empty")
@@ -719,13 +725,13 @@ class RelativeHumidity1BPayload(RelativeHumidityPayload):
         raw_val = int(round(self.humidity_percent * 2.0))
         return struct.pack(self._STRUCT_FMT, raw_val)
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert 1-byte humidity payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded humidity dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {SZ_INDOOR_HUMIDITY: self.humidity_percent}
 
@@ -780,13 +786,13 @@ class RelativeHumidity2BPayload(RelativeHumidityPayload):
         raw_val = int(round(self.humidity_percent * 100.0))
         return struct.pack(self._STRUCT_FMT, 0x00, raw_val)
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert 2-byte humidity payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded humidity dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {SZ_INDOOR_HUMIDITY: self.humidity_percent}
 
@@ -889,15 +895,15 @@ class RelativeHumidity6BPayload(RelativeHumidityPayload):
             self._STRUCT_FMT, index_raw, hum_raw, temp_raw, dew_raw
         )
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert humidity payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded humidity dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
-        result: dict[str, Any] = {}
+        result: PayloadT = {}
         if self.hvac_index is not None:
             result["hvac_index"] = self.hvac_index
             if self.hvac_index == "00":
@@ -981,13 +987,13 @@ class AirQualityBasisPayload(PayloadBase):
         aq_raw = int(round(self.air_quality_percent * 200.0))
         return bytes([aq_raw, self.basis_flag])
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert air quality basis payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded air quality dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         basis_map = {0x10: "voc", 0x20: "co2", 0x40: "rel_humidity"}
         return {
@@ -1269,13 +1275,13 @@ class HvacAutoRequestPayload(PayloadBase):
             return bytes([fan_raw, self.request_reason])
         return b"\x00"
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert HVAC auto request payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded auto request dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         if self.exhaust_fan_speed is not None or self.unknown_78 is not None:
             return {
@@ -1380,7 +1386,7 @@ class HvacVentilationStatusPayload(PayloadBase):
     @classmethod
     def from_bytes(
         cls, raw_data: bytes
-    ) -> "HvacVentilationStatus2BPayload | HvacVentilationStatus4BPayload":
+    ) -> HvacVentilationStatus2BPayload | HvacVentilationStatus4BPayload:
         """Unpack ventilation status payload, dispatching by length."""
         if len(raw_data) >= 4:
             return HvacVentilationStatus4BPayload.from_bytes(raw_data)
@@ -1448,13 +1454,13 @@ class HvacVentilationStatus2BPayload(HvacVentilationStatusPayload):
         """
         return struct.pack(self._STRUCT_FMT, self.flow_mode, self.status_flags)
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert ventilation status to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded ventilation status dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {
             "flow_mode": self.flow_mode,
@@ -1536,13 +1542,13 @@ class HvacVentilationStatus4BPayload(HvacVentilationStatusPayload):
             self._STRUCT_FMT, self.flow_mode, self.status_flags, 0, 0
         )
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert ventilation status to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded ventilation status dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         if self.status_flags == 1:
             r4 = self.raw_bytes[2] if len(self.raw_bytes) > 2 else 0
@@ -1627,13 +1633,13 @@ class HvacFanModePayload(PayloadBase):
         raw_max = 0xFF if self.mode_max is None else self.mode_max
         return struct.pack(">BBB", self.header, raw_index, raw_max)
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert fan mode payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded fan mode dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         if self.mode_index is None:
             return {}
@@ -1750,13 +1756,13 @@ class HvacFlowRatePayload(PayloadBase):
             )
         return bytes(buffer)
 
-    def to_dict(self, msg: Any = None) -> list[dict[str, Any]]:  # type: ignore[override]
+    def to_dict(self, msg: Message | None = None) -> list[PayloadT]:  # type: ignore[override]
         """Convert flow rate payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: List of decoded measure dictionaries.
-        :rtype: list[dict[str, Any]]
+        :rtype: list[PayloadT]
         """
         return [
             {"hvac_index": f"{index:02X}", "measure": measure}
@@ -1814,13 +1820,13 @@ class HvacFanRatePayload(PayloadBase):
         """
         return self.raw_bytes
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert fan rate payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded fan rate dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         b = self.raw_bytes
         mode_byte = (
@@ -1914,13 +1920,13 @@ class HvacBypassPositionPayload(PayloadBase):
         """
         return self.raw_bytes
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert bypass position payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded bypass position dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         b = self.raw_bytes
         b1, b2 = b[1], b[2]
@@ -2046,16 +2052,16 @@ class HvacVentilationControlPayload(PayloadBase):
             )
         return bytes([self.header, self.flags_byte, self.minutes])
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert 22F3 payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded ventilation control dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         flags = [(self.flags_byte >> i) & 1 for i in range(7, -1, -1)]
-        result: dict[str, Any] = {
+        result: PayloadT = {
             "minutes": self.minutes,
             "flags": flags,
         }
@@ -2311,13 +2317,13 @@ class HvacFanParamPayload(PayloadBase):
             self.trailer_bytes,
         )
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert HVAC fan parameters payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded fan parameter dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         p_str = f"{self.parameter_id:02X}"
         schema_info = _2411_PARAMS_SCHEMA.get(p_str)
@@ -2426,13 +2432,13 @@ class HvacAirQualityPayload(PayloadBase):
         aqi_val = 0 if self.air_quality_aqi is None else self.air_quality_aqi
         return struct.pack(">H", aqi_val)
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert air quality payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded air quality dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         if self._raw_4b is not None:
             b = self._raw_4b
@@ -2445,7 +2451,7 @@ class HvacAirQualityPayload(PayloadBase):
                 md = "disabled"
             else:
                 md = f"{b[3]:02X}"
-            result: dict[str, Any] = {"mode": md}
+            result: PayloadT = {"mode": md}
             if md != "disabled":
                 result["demand"] = dm
             if b[0] != 0:
@@ -2548,13 +2554,13 @@ class HvacBypassStatePayload(PayloadBase):
             return bytes([self.bypass_position or 0, self.mode_flags or 0])
         return bytes([self._header, self._flags_byte, self._speed_byte])
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert 31D9 payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded bypass damper state dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         if self._raw_len == 2:
             return {
@@ -2598,7 +2604,7 @@ class HvacBypassStatePayload(PayloadBase):
             }
         else:
             fan_mode_map = {0: "off", 5: "auto"}
-        result: dict[str, Any] = {}
+        result: PayloadT = {}
         # exhaust_fan_speed = spd / 200.0 is only meaningful for long
         # payloads (Itho, ClimaRad) where spd is a raw 0-200 RPM value.
         # For 4-byte Orcon payloads, spd is a semantic fan mode (0-5),
@@ -2625,12 +2631,10 @@ class HvacBypassStatePayload(PayloadBase):
 
         if self._unknown_16 is not None:
             result["unknown_16"] = self._unknown_16
-        if (
-            msg is not None
-            and getattr(msg, "_packet", None)
-            and getattr(msg._packet, "_seqn", None)
-        ):
-            result["seqx_num"] = msg._packet._seqn
+        if msg is not None:
+            packet = getattr(msg, "_packet", None)
+            if packet is not None and getattr(packet, "_seqn", None):
+                result["seqx_num"] = packet._seqn
         return result
 
 
@@ -2689,17 +2693,17 @@ class HvacVentilationStatePayload(PayloadBase):
         """
         return self.raw_bytes
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert extended ventilation state payload to legacy dictionary format.
 
         :returns: Decoded ventilation parameters dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         raw_hex = self.raw_bytes.hex().upper()
         if len(raw_hex) < 58:
             return {"raw_bytes": self.raw_bytes.hex()}
 
-        result: dict[str, Any] = {}
+        result: PayloadT = {}
 
         def _parse_val(
             hex_str: str,
@@ -3073,13 +3077,13 @@ class HvacSpiderTemperaturesPayload(PayloadBase):
             temp_bytes.extend(struct.pack(">h", temp_val))
         return bytes([self.hdr]) + temp_bytes + bytes([self.trailer])
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert Spider temperatures payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded temperatures dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {"temperatures": list(self.temperatures)}
 
@@ -3178,13 +3182,13 @@ class HvacSpiderSetpointBoundsPayload(PayloadBase):
             max_b.extend(struct.pack(">h", max_val))
         return bytes([self.hdr]) + min_b + bytes([self.mode_code]) + max_b
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert Spider setpoint bounds payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded setpoint bounds dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         mode_str = {0: "off", 2: "cool", 4: "heat"}.get(
             self.mode_code, f"{self.mode_code:02X}"
@@ -3254,13 +3258,13 @@ class HvacSpiderModePayload(PayloadBase):
             self._STRUCT_FMT, self.hdr, self.mode_code, int(self.unknown_2, 16)
         )
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert Spider mode payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded mode dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         mode_str = {0: "off", 1: "heat", 2: "cool", 4: "heat"}.get(
             self.mode_code, f"{self.mode_code:02X}"
@@ -3323,13 +3327,13 @@ class HvacSpiderStatusPayload(PayloadBase):
         """
         return struct.pack(self._STRUCT_FMT, self.hdr, self.flags)
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert Spider status payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded status dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         flg = self.flags
         return {
@@ -3417,13 +3421,13 @@ class WindowStatePayload(PayloadBase):
         cls,
         zone_index: int = 0,
         window_open: bool | None = None,
-    ) -> "WindowState2BPayload | WindowState3BPayload":
+    ) -> WindowState2BPayload | WindowState3BPayload:
         """Construct WindowState payload variant dynamically from arguments."""
         return WindowState3BPayload(
             zone_index=zone_index, window_open=window_open
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert window state payload to legacy dictionary layout."""
         z_index = getattr(self, "zone_index", 0)
         open_val = getattr(self, "window_open", None)
@@ -3431,7 +3435,7 @@ class WindowStatePayload(PayloadBase):
         return {SZ_ZONE_INDEX: index_str, "window_open": open_val}
 
     @classmethod
-    def from_bytes(cls, raw_data: bytes) -> "WindowStatePayload":
+    def from_bytes(cls, raw_data: bytes) -> WindowStatePayload:
         """Unpack window state binary payload, dispatching by length."""
         if len(raw_data) < 2:
             raise ValueError(
@@ -3562,13 +3566,13 @@ class HvacVentilationDemandPayload(PayloadBase):
         cls,
         flags: int = 0,
         demand_percent: float = 0.0,
-    ) -> "HvacVentilationDemand4BPayload":
+    ) -> HvacVentilationDemand4BPayload:
         """Construct HvacVentilationDemand payload variant dynamically from arguments."""
         return HvacVentilationDemand4BPayload(
             flags=flags, demand_percent=demand_percent
         )
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert ventilation demand payload to legacy dictionary layout."""
         flg = getattr(self, "flags", 0)
         dem = getattr(self, "demand_percent", 0.0)
@@ -3827,16 +3831,16 @@ class SetpointBoundsPayload(PayloadBase):
             self.mode_code,
         )
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert setpoint bounds payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded setpoint bounds dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         mode_map = {0: "off", 1: "heat", 2: "cool"}
-        result: dict[str, Any] = {
+        result: PayloadT = {
             SZ_UFH_INDEX: f"{self.ufh_index:02X}",
             "setpoint_bounds": (self.min_temp, self.max_temp),
         }
@@ -3996,13 +4000,13 @@ class UfhSystemModePayload(PayloadBase):
         """
         return struct.pack(self._STRUCT_FMT, self.ufh_index, self.flags)
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert UFH system mode payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded UFH mode dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {
             "index": f"{self.ufh_index:02X}",
@@ -4077,11 +4081,11 @@ class DesiredBoilerSetpointPayload(PayloadBase):
         )
         return struct.pack(self._STRUCT_FMT, self.domain_or_zone_index, t_raw)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> PayloadT:
         """Convert desired boiler setpoint payload to legacy dictionary layout.
 
         :returns: Decoded setpoint dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {"setpoint": self.target_temp}
 
@@ -4104,7 +4108,7 @@ class CoolingStatePayload(PayloadBase):
     @classmethod
     def from_bytes(
         cls, raw_data: bytes
-    ) -> "CoolingState2BPayload | CoolingState3BPayload":
+    ) -> CoolingState2BPayload | CoolingState3BPayload:
         """Unpack cooling state binary payload, dispatching by length.
 
         :param raw_data: Raw binary byte string.
@@ -4129,13 +4133,13 @@ class CoolingStatePayload(PayloadBase):
         """
         raise NotImplementedError("Use concrete variant sub-dataclass")
 
-    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert cooling state payload to dictionary format.
 
         :param msg: Optional legacy message context.
         :type msg: Any
         :returns: Decoded dictionary format.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return {
             SZ_ZONE_INDEX: f"{self.domain_or_zone_index:02X}",
@@ -4350,18 +4354,18 @@ class HvacTimeOffsetPayload(PayloadBase):
             self._raw_extra,
         )
 
-    def to_dict(self, msg: Any | None = None) -> dict[str, Any]:
+    def to_dict(self, msg: Message | None = None) -> PayloadT:
         """Convert payload to dictionary representation.
 
         :param msg: Optional message object containing packet timestamp context.
         :type msg: Any | None
         :returns: Decoded payload dictionary.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         val_02 = f"{self.offset_mins:08X}"
         val_10 = f"{self.offset_secs:02X}"
         val_12 = self._raw_extra.hex().upper()
-        result: dict[str, Any] = {
+        result: PayloadT = {
             "value_02": val_02,
             "value_10": val_10,
             "value_12": val_12,
