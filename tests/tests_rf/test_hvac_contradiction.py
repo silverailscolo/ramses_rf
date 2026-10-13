@@ -673,3 +673,130 @@ def test_fan_evidence_blocks_co2_promotion() -> None:
         and e.metadata.get("device_class") == DevType.CO2
     ]
     assert co2_events == []
+
+
+# --- Tests for quiet-CO2-sensor reclassification (issue 1287) ---
+
+
+def _quiet_co2_events(
+    emitted: list[TopologyChangedEvent],
+) -> list[TopologyChangedEvent]:
+    """Return quiet-sensor FAN→CO2 reclassification events."""
+    return [
+        e for e in emitted if e.causation == "Rule_HVAC_Quiet_1298_FAN_to_CO2"
+    ]
+
+
+def test_quiet_co2_sensor_reclassified_from_fan() -> None:
+    """A FAN-typed device that only broadcasts I 1298 is a CO2 sensor.
+
+    A standalone CO2 sensor in the 32: domain never services the fan
+    domain — no FAN signatures sent, no fan-domain requests received.
+    Three CO2 broadcasts with zero fan-domain traffic in either
+    direction is strong sensor evidence (issue 1287).
+    """
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {"32:090174": {"class": DevType.FAN, "locked": False}}
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    for _ in range(3):
+        handler.consume(
+            _FakeMsg("32:090174", "--:------", Verb.I_, Code._1298)
+        )
+
+    events = _quiet_co2_events(emitted)
+    assert len(events) >= 1
+    assert events[0].device_id == "32:090174"
+    assert events[0].metadata["device_class"] == DevType.CO2
+
+
+def test_fan_with_31da_and_1298_stays_fan() -> None:
+    """A FAN broadcasting both 31DA and 1298 is not a CO2 sensor.
+
+    The integrated-CO2-sensor case: the FAN signatures (I 31DA) prove
+    fan behaviour, so the I 1298 broadcasts are a FAN feature.
+    """
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {"32:150000": {"class": DevType.FAN, "locked": False}}
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    for _ in range(3):
+        handler.consume(
+            _FakeMsg("32:150000", "--:------", Verb.I_, Code._1298)
+        )
+        handler.consume(
+            _FakeMsg("32:150000", "--:------", Verb.I_, Code._31DA)
+        )
+
+    assert _quiet_co2_events(emitted) == []
+
+
+def test_fan_receiving_fan_requests_stays_fan() -> None:
+    """A FAN-typed device that receives fan-domain requests stays FAN.
+
+    A bound remote requesting parameters (RQ 2411) proves the device
+    services the fan domain — the I 1298 broadcasts are a FAN feature
+    (integrated CO2 sensor), not a standalone sensor.
+    """
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {
+            "32:150000": {"class": DevType.FAN, "locked": False},
+            "37:169161": {"class": DevType.REM, "locked": False},
+        }
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    # A REM polls the device for fan parameters — receive-direction
+    # evidence that it behaves as a FAN.
+    handler.consume(_FakeMsg("37:169161", "32:150000", Verb.RQ, Code._2411))
+    for _ in range(3):
+        handler.consume(
+            _FakeMsg("32:150000", "--:------", Verb.I_, Code._1298)
+        )
+
+    assert handler._evidence["32:150000"]["recv_fan"] == 1
+    assert _quiet_co2_events(emitted) == []
+
+
+def test_gateway_probe_is_not_fan_request_evidence() -> None:
+    """An HGI's RQ 2411 probe must not block quiet-CO2 reclassification.
+
+    Gateway-originated probing (eavesdrop, active poll) is not
+    evidence that other devices treat the target as a FAN — the
+    reply (or its absence) is the evidence, not the request.
+    """
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {"32:090174": {"class": DevType.FAN, "locked": False}}
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    handler.consume(_FakeMsg("18:000001", "32:090174", Verb.RQ, Code._2411))
+    for _ in range(3):
+        handler.consume(
+            _FakeMsg("32:090174", "--:------", Verb.I_, Code._1298)
+        )
+
+    assert handler._evidence["32:090174"]["recv_fan"] == 0
+    assert len(_quiet_co2_events(emitted)) >= 1
+
+
+def test_locked_fan_not_reclassified_by_quiet_co2() -> None:
+    """A user-locked FAN class is never overridden by evidence."""
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {"32:090174": {"class": DevType.FAN, "locked": True}}
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    for _ in range(3):
+        handler.consume(
+            _FakeMsg("32:090174", "--:------", Verb.I_, Code._1298)
+        )
+
+    assert _quiet_co2_events(emitted) == []
