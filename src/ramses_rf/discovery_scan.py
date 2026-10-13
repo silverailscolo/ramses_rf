@@ -245,6 +245,15 @@ _000C_DOMAIN_ROLES: frozenset[str] = frozenset(
 # distinguish, so it's NOT in this set.
 _UNAMBIGUOUS_HVAC_PREFIXES: frozenset[str] = frozenset({"18", "32"})
 
+# "verb:code" signatures only a FAN sends as source (mirrors the core
+# pairs of HvacTopologyHandler's _FAN_EVIDENCE).  Used to distinguish
+# a 32: CO2 sensor from a FAN with an integrated CO2 sensor: both
+# broadcast I 1298, but the FAN always shows one of these signatures
+# or receives directed fan-domain requests.
+_FAN_SIGNATURE_PAIRS: frozenset[str] = frozenset(
+    {" I:31D9", " I:31DA", "RP:31DA", "RP:2411"}
+)
+
 # Valid HVAC types per prefix — constrains VC pair matching so a 37: device
 # sending 31D9 I (which maps to FAN) is only classified as FAN if FAN is in
 # the allowed set for that prefix.  29: and 37: are both ambiguous: they can
@@ -258,6 +267,32 @@ _AMBIGUOUS_HVAC_PREFIX_TYPES: dict[str, frozenset[DevType]] = {
         {DevType.FAN, DevType.REM, DevType.CO2, DevType.HUM, DevType.DIS}
     ),
 }
+
+
+def _is_pure_co2_sensor(device: DiscoveredDevice | None) -> bool:
+    """Whether a 32:-prefix device's traffic matches a standalone CO2 sensor.
+
+    A standalone CO2 sensor broadcasts I 1298 (CO2 level) but never
+    services the fan domain: it sends no FAN signatures (I 31D9,
+    I/RP 31DA, RP 2411) and receives no directed fan-domain requests
+    (a FAN is the target of 22F1/31DA/2411/... requests from bound
+    remotes and displays).  A FAN with an integrated CO2 sensor fails
+    at least one of those — it broadcasts 31DA or is polled — so it
+    stays FAN.  Mirrors HvacTopologyHandler's evidence model (issue
+    1287).
+
+    :param device: The tracked device, or None for a first sighting.
+    :type device: DiscoveredDevice | None
+    :return: True when the observed traffic is pure-CO2-sensor.
+    :rtype: bool
+    """
+    if device is None or " I:1298" not in device.verb_codes_seen:
+        return False
+    if device.fan_requests_received > 0:
+        return False
+    return not any(
+        pair in _FAN_SIGNATURE_PAIRS for pair in device.verb_codes_seen
+    )
 
 
 def _is_display_signature(device: DiscoveredDevice | None) -> bool:
@@ -335,6 +370,11 @@ class DiscoveredDevice:
     # the strategy pattern arrives, _classify becomes
     # strategy.classify(packet) and this tracking moves with it.
     contradiction_count: int = 0
+    # Directed fan-domain requests received as destination (issue
+    # 1287).  A real FAN is the *target* of requests from bound
+    # remotes and displays; a standalone CO2 sensor receives none.
+    # Used with verb_codes_seen to distinguish the two at 32:.
+    fan_requests_received: int = 0
 
     def to_dict(self) -> SchemaT:
         """Serialize to a plain dict (for JSON export)."""
@@ -454,13 +494,15 @@ class DiscoveryScan:
         # The gateway's own HGI is never a "discovered" device.
         # Check the active HGI ID from the transport directly — the device
         # may not be in the device_registry yet when the first packets arrive.
-        # TODO: when multiple HGI gateways are supported, this must check
-        # against all gateway IDs, not just the single active one.
         engine = getattr(self._gateway, "_engine", None)
         transport = getattr(engine, "_transport", None) if engine else None
         if transport is not None:
             active_hgi = transport.get_extra_info(SZ_ACTIVE_HGI)
             if active_hgi == device_id:
+                return True
+            # Multi-HGI pools: every pool member is an own gateway, not
+            # just the currently active child (issue 1257, item 4.1).
+            if device_id in (transport.get_extra_info("pool_hgi_ids") or ()):
                 return True
         # Also check via the hgi property (covers the case where the device
         # is in the registry but the transport extra_info is not set)
@@ -642,6 +684,25 @@ class DiscoveryScan:
                 destination=None,
                 source=source,  # who sent this packet (for HVAC reply inference)
             )
+            # Receive-direction evidence for FAN-vs-CO2 disambiguation
+            # (issue 1287): a real FAN is the *target* of directed
+            # fan-domain requests from bound remotes and displays; a
+            # standalone CO2 sensor receives none.  Gateway-originated
+            # probes (18: src, e.g. eavesdrop RQ 2411) don't count —
+            # the reply (or its absence) is the evidence, not the
+            # request itself.
+            dst_device = self._devices.get(destination)
+            if (
+                dst_device is not None
+                and destination.startswith("32:")
+                and code in _HVAC_PARENT_INFERENCE_CODES
+                and verb in (Verb.W_, Verb.RQ, Verb.I_)
+                and source
+                and _is_valid_address(source)
+                and not source.startswith("18:")
+            ):
+                dst_device.fan_requests_received += 1
+                self._dirty = True
 
         # addr3: lowest-confidence (broadcast target or relay)
         if (
@@ -1509,8 +1570,18 @@ def _classify(
     """
     prefix = device_id[:2]
 
-    # 1. Unambiguous HVAC prefixes (32:=FAN) — check first
+    # 1. Unambiguous HVAC prefixes — check first.
+    #    32: defaults to FAN, but the prefix alone cannot distinguish
+    #    a ventilation unit from a standalone CO2 sensor bound in the
+    #    fan domain — both live at 32: addresses, and a FAN with an
+    #    integrated CO2 sensor broadcasts I 1298 too.  When device
+    #    history shows a pure-sensor signature (I 1298 sent, no FAN
+    #    signatures sent, no fan-domain requests received), classify
+    #    as CO2 instead (issue 1287).  Note the prefix still wins over
+    #    REM-mapped VC pairs: a real FAN sends 22F1 and stays FAN.
     if prefix in _UNAMBIGUOUS_HVAC_PREFIXES:
+        if prefix == "32" and _is_pure_co2_sensor(device):
+            return DevType.CO2
         return _PREFIX_TO_TYPE[prefix]
 
     # 2. CTL-only codes (only if this device is the sender)

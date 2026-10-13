@@ -105,7 +105,7 @@ class HvacTopologyHandler(TopologyHandler):
             device_class_lookup_cb=device_class_lookup_cb,
         )
         # Per-device evidence: {device_id: {"fan": int, "non_fan": int,
-        # "co2": int}}
+        # "co2": int, "recv_fan": int}}
         self._evidence: dict[str, dict[str, int]] = {}
 
     def consume(self, msg: Message) -> None:
@@ -203,7 +203,8 @@ class HvacTopologyHandler(TopologyHandler):
             is_faked = bool(src_traits.get("faked")) if src_traits else False
 
             ev = self._evidence.setdefault(
-                src_id, {"fan": 0, "non_fan": 0, "co2": 0}
+                src_id,
+                {"fan": 0, "non_fan": 0, "co2": 0, "recv_fan": 0},
             )
             if vc in _FAN_EVIDENCE:
                 ev["fan"] += 1
@@ -213,6 +214,25 @@ class HvacTopologyHandler(TopologyHandler):
                 vc == (Verb.RQ, Code._2411) and is_faked
             ):
                 ev["non_fan"] += 1
+
+            # Receive-direction evidence: a real FAN is also the
+            # *target* of requests from bound remotes and displays —
+            # the same VC pairs that classify the sender as non-FAN.
+            # A standalone CO2 sensor receives none.  Gateway-originated
+            # probes (18: src, e.g. eavesdrop RQ 2411) don't count —
+            # the reply (or its absence) is the evidence, not the
+            # request itself.
+            dst_id = msg.dst.id
+            if (
+                dst_id != "--:------"
+                and dst_id != src_id
+                and vc in _NON_FAN_EVIDENCE
+                and not src_id.startswith("18:")
+            ):
+                self._evidence.setdefault(
+                    dst_id,
+                    {"fan": 0, "non_fan": 0, "co2": 0, "recv_fan": 0},
+                )["recv_fan"] += 1
 
             # --- Direct CO2 promotion ---
             # I 1298 is the CO2 level broadcast.  A standalone CO2
@@ -345,3 +365,43 @@ class HvacTopologyHandler(TopologyHandler):
                             ev["non_fan"],
                         )
                         ev["warned"] = True
+
+            # --- Quiet CO2 sensor: FAN-typed, broadcasts only I 1298 ---
+            # A standalone CO2 sensor in the 32: domain never services
+            # the fan domain — it sends no FAN signatures and receives
+            # no fan-domain requests — while a FAN with an integrated
+            # CO2 sensor always does at least one (broadcasts 31DA/31D9
+            # or is polled by bound remotes/displays).  This catches
+            # pure sensors that the non-FAN contradiction path cannot
+            # reach (they never accumulate non_fan evidence).  Gated
+            # on the broadcast count for stability (issue 1287).
+            if (
+                current_class == DevType.FAN
+                and not is_locked
+                and not is_faked
+                and ev["co2"] >= _RECLASSIFY_THRESHOLD
+                and ev["fan"] == 0
+                and ev["recv_fan"] == 0
+            ):
+                self._emit(
+                    TopologyChangedEvent(
+                        action=TopologyAction.UPDATE_DEVICE_CLASS,
+                        device_id=src_id,
+                        metadata={"device_class": DevType.CO2},
+                        causation="Rule_HVAC_Quiet_1298_FAN_to_CO2",
+                    )
+                )
+                if not ev.get("warned_quiet_co2", False):
+                    _LOGGER.warning(
+                        "Device %s is typed as FAN but has only "
+                        "broadcast I 1298 (%d packets) and never sent "
+                        "FAN signatures or received fan-domain "
+                        "requests — suggesting reclassification to "
+                        "CO2 (likely a standalone CO2 sensor).  Run "
+                        "the discovery/config flow to accept this "
+                        "change, or add '_locked: true' to suppress "
+                        "this warning.",
+                        src_id,
+                        ev["co2"],
+                    )
+                    ev["warned_quiet_co2"] = True

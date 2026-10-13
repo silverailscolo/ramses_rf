@@ -107,9 +107,7 @@ class DeviceBase(Entity):
         self.id: DeviceIdT = device_address.id
 
         self.addr = device_address
-        self.type = (
-            device_address.type
-        )  # DEX  # TODO: remove this attr? use SLUG?
+        self.type = device_address.type  # DEX
 
         self._scheme: str | None = traits.scheme if traits else None
         self._strategy: HvacStrategy | None = None
@@ -771,9 +769,7 @@ class Fakeable(DeviceBase):
         self._binding_manager = BindingManager(self, self._gateway.dispatcher)
         if self.id not in self._gateway.config.known_list:
             self._gateway.config.known_list[self.id] = {}
-        self._gateway.config.known_list[self.id][SZ_FAKED] = (
-            True  # TODO: remove this
-        )
+        self._gateway.config.known_list[self.id][SZ_FAKED] = True
         _LOGGER.info("Faking now enabled for: %s", self)
 
     async def _wait_for_binding_request(
@@ -984,7 +980,7 @@ class HgiGateway(Device):  # HGI (18:)
         """
         super().__init__(*args, traits=traits, **kwargs)
 
-        self._child_id = "gw"  # TODO
+        self._child_id = "gw"  # placeholder; topology may overwrite
 
     @property
     def message_timeout(self) -> td:
@@ -1144,7 +1140,7 @@ class DeviceHvac(Device):  # HVAC domain: ventilation, PIV, MV/HR
         """
         super().__init__(gateway, device_address, traits=traits, **kwargs)
 
-        self._child_id = "hv"  # TODO: domain_id/deprecate
+        self._child_id = "hv"  # placeholder; topology may overwrite
         # 6d: bidirectional parent link — set by HvacVentilator._update_schema()
         # when this device is added to a FAN's remotes[]/sensors[] list.
         # Used by ramses_cc to group independent devices based on the schema.
