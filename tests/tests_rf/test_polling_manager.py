@@ -15,6 +15,7 @@ from ramses_rf.models import DeviceTraits
 from ramses_rf.pipeline.polling import (
     DEFAULT_POLLING_SCHEDULES,
     INTERVAL_DAILY,
+    INTERVAL_FAN_KEEP_ALIVE,
     INTERVAL_STARTUP_2E04,
     POLL_REPLY_TIMEOUT,
     PollingManager,
@@ -93,6 +94,76 @@ def test_polling_manager_schedule_resolution_defaults(
     assert ctl_schedule == DEFAULT_POLLING_SCHEDULES["CTL"]
     assert bdr_schedule == DEFAULT_POLLING_SCHEDULES["BDR"]
     assert fan_schedule == DEFAULT_POLLING_SCHEDULES["FAN"]
+
+
+def test_polling_manager_fan_keepalive_roles(
+    mock_gateway: MagicMock,
+) -> None:
+    """FAN keep-alive swaps from 10E0 to 10D0 once support is confirmed.
+
+    Until supports_10d0 is confirmed, the universally-answered 10E0 keeps
+    the device alive at keep-alive rate and 10D0 only re-probes daily.
+    Once confirmed, 10D0 replies carry liveness + filter data, so 10E0
+    drops back to daily (issue 1288).
+    """
+    poller = PollingManager(mock_gateway, shadow_mode=True)
+
+    unconfirmed_fan = MockDevice(mock_gateway, "32:333333", slug="FAN")
+    schedule = poller.resolve_schedule_for_device(unconfirmed_fan)
+    assert schedule[Code._10E0] == INTERVAL_FAN_KEEP_ALIVE
+    assert schedule[Code._10D0] == INTERVAL_DAILY
+
+    supported_fan = MockDevice(mock_gateway, "32:444444", slug="FAN")
+    supported_fan.supports_10d0 = True  # set by 10D0 RP ingestion
+    schedule = poller.resolve_schedule_for_device(supported_fan)
+    assert schedule[Code._10E0] == INTERVAL_DAILY
+    assert schedule[Code._10D0] == INTERVAL_FAN_KEEP_ALIVE
+
+
+def test_polling_manager_fan_keepalive_user_override(
+    mock_gateway: MagicMock,
+) -> None:
+    """An explicit polling_interval trait wins over the keep-alive roles."""
+    traits = DeviceTraits(polling_interval={Code._10E0: 3600, Code._10D0: 300})
+    fan_dev = MockDevice(mock_gateway, "32:555555", slug="FAN", traits=traits)
+    fan_dev.supports_10d0 = True
+    poller = PollingManager(mock_gateway, shadow_mode=True)
+
+    schedule = poller.resolve_schedule_for_device(fan_dev)
+    assert schedule[Code._10E0] == 3600
+    assert schedule[Code._10D0] == 300
+
+
+def test_polling_manager_interval_change_reschedules_next_due(
+    mock_gateway: MagicMock,
+) -> None:
+    """A changed interval must recompute next_due, not wait for the old one.
+
+    Without this, the 10E0/10D0 keep-alive swap (when supports_10d0 is
+    confirmed) and user polling_interval overrides would only take
+    effect at the previously-scheduled time — up to a day away
+    (issue 1288).
+    """
+    poller = PollingManager(mock_gateway, shadow_mode=True)
+    fan_dev = MockDevice(mock_gateway, "32:333333", slug="FAN")
+    mock_gateway.device_registry.devices = [fan_dev]
+
+    poller.update_device_tasks(fan_dev)
+    dkey = ("32:333333", Code._10D0)
+    task = poller._tasks[dkey]
+    assert task.interval == INTERVAL_DAILY
+    first_due = task.next_due
+    assert first_due > dt.now(UTC) + td(hours=12)
+
+    # supports_10d0 confirmed by an RP|10D0 → 10D0 becomes keep-alive
+    fan_dev.supports_10d0 = True
+    poller.update_device_tasks(fan_dev)
+
+    assert task.interval == INTERVAL_FAN_KEEP_ALIVE
+    assert task.next_due < first_due
+    assert task.next_due <= dt.now(UTC) + td(
+        seconds=INTERVAL_FAN_KEEP_ALIVE + 5
+    )
 
 
 def test_polling_manager_custom_trait_override(
