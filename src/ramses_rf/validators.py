@@ -207,8 +207,7 @@ def validate_slugs(gateway: Gateway, msg: Message) -> bool:
     src_dev = gateway.device_registry.device_by_id.get(msg.src.id)
     slug = getattr(src_dev, "_SLUG", None)
 
-    if slug not in (None, DevType.HGI, DevType.DEV, DevType.HEA, DevType.HVC):
-        # TODO: use DEV_TYPE_MAP.PROMOTABLE_SLUGS
+    if slug not in (None, DevType.HGI, *DEV_TYPE_MAP.PROMOTABLE_SLUGS):
         if slug not in CODES_BY_DEV_SLUG:
             raise exc.PacketInvalid(
                 f"{msg!r} < Unknown src slug ({slug}), is it HVAC?"

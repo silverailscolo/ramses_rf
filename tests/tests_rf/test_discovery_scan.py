@@ -36,6 +36,7 @@ from ramses_rf.discovery_scan import (
     _recompute_confidence,
     _should_update_domain_id,
 )
+from ramses_tx.const import SZ_ACTIVE_HGI
 from ramses_tx.dtos import PacketDTO
 
 # ---------------------------------------------------------------------------
@@ -1087,6 +1088,25 @@ class TestDiscoveryScanPacketHandling:
         assert scan.get_device("18:130236") is dev  # same object
         assert dev.source_count == 2
         assert Code._10E0 in dev.codes_seen
+
+    def test_pool_member_hgi_is_known(self) -> None:
+        """Every pool member HGI counts as our own gateway, not just the
+        currently active child (multi-HGI pool, issue 1257 item 4.1).
+
+        Without the pool check, a secondary pool HGI would be flagged as
+        a discovered device whenever it is not the active transport.
+        """
+        gwy = make_mock_gateway()
+        gwy._engine._transport.get_extra_info = MagicMock(
+            side_effect=lambda key, default=None: {
+                SZ_ACTIVE_HGI: "18:001234",
+                "pool_hgi_ids": ["18:001234", "18:149488"],
+            }.get(key, default)
+        )
+        scan = DiscoveryScan(gwy)
+        assert scan._is_known("18:001234") is True  # active pool child
+        assert scan._is_known("18:149488") is True  # secondary pool member
+        assert scan._is_known("18:999999") is False  # foreign HGI
 
     def test_unknown_hgi_tracked(self) -> None:
         """An unknown HGI (e.g. neighbour's) should be tracked but not
@@ -2795,3 +2815,158 @@ class TestDisClassification:
         assert dev is not None
         assert dev.verb_codes_seen == []
         scan.stop()
+
+
+class TestFanCo2Reclassification:
+    """32:-prefix FAN-vs-CO2 disambiguation (issue 1287).
+
+    The 32: prefix defaults to FAN, but standalone CO2 sensors live at
+    32: addresses too, and a FAN with an integrated CO2 sensor also
+    broadcasts I 1298.  Direction-aware evidence distinguishes them: a
+    pure sensor sends I 1298, sends no FAN signatures (I 31D9, I/RP
+    31DA, RP 2411), and receives no directed fan-domain requests.
+    """
+
+    def test_known_fan32_reclassified_to_co2_by_quiet_1298(self) -> None:
+        """A FAN-declared 32: device that only broadcasts I 1298 is
+        re-classified to CO2 after the contradiction threshold."""
+        gwy = make_mock_gateway(known_list={"32:090174": {"class": "FAN"}})
+        scan = DiscoveryScan(gwy)
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(src="32:090174", code=Code._1298, verb=Verb.I_)
+            )
+        dev = scan.get_device("32:090174")
+        assert dev is not None
+        assert dev.likely_type == DevType.CO2  # re-classified
+        assert dev.confidence == "high"
+        scan.stop()
+
+    def test_fan32_with_fan_signature_stays_fan(self) -> None:
+        """A 32: device broadcasting both I 1298 and I 31DA is a FAN
+        with an integrated CO2 sensor — the FAN signature must win."""
+        gwy = make_mock_gateway(known_list={"32:150000": {"class": "FAN"}})
+        scan = DiscoveryScan(gwy)
+        for _ in range(4):
+            # 31DA first so the FAN signature is recorded before the
+            # CO2 broadcasts — the device must stay FAN throughout.
+            scan._process_packet(
+                make_dto(src="32:150000", code=Code._31DA, verb=Verb.I_)
+            )
+            scan._process_packet(
+                make_dto(src="32:150000", code=Code._1298, verb=Verb.I_)
+            )
+        dev = scan.get_device("32:150000")
+        assert dev is not None
+        assert dev.likely_type == DevType.FAN
+        assert dev.contradiction_count == 0
+        scan.stop()
+
+    def test_fan32_co2_first_then_fan_signature_stays_fan(self) -> None:
+        """A FAN whose I 1298 arrives before its first 31DA still
+        recovers: the late FAN signature restores the prefix class and
+        the transient contradiction can never reach the threshold."""
+        gwy = make_mock_gateway(known_list={"32:150000": {"class": "FAN"}})
+        scan = DiscoveryScan(gwy)
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(src="32:150000", code=Code._1298, verb=Verb.I_)
+            )
+            scan._process_packet(
+                make_dto(src="32:150000", code=Code._31DA, verb=Verb.I_)
+            )
+        dev = scan.get_device("32:150000")
+        assert dev is not None
+        assert dev.likely_type == DevType.FAN
+        assert dev.contradiction_count < 3
+        scan.stop()
+
+    def test_fan32_receiving_fan_requests_stays_fan(self) -> None:
+        """A 32: device that is the target of fan-domain requests is a
+        real FAN — bound remotes poll it, a CO2 sensor is never polled."""
+        gwy = make_mock_gateway(
+            known_list={
+                "32:150000": {"class": "FAN"},
+                "37:169161": {"class": "REM"},
+            }
+        )
+        scan = DiscoveryScan(gwy)
+        # A bound REM requests fan parameters from the device
+        scan._process_packet(
+            make_dto(
+                src="37:169161",
+                dst="32:150000",
+                code=Code._2411,
+                verb=Verb.RQ,
+            )
+        )
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(src="32:150000", code=Code._1298, verb=Verb.I_)
+            )
+        dev = scan.get_device("32:150000")
+        assert dev is not None
+        assert dev.fan_requests_received == 1
+        assert dev.likely_type == DevType.FAN
+        scan.stop()
+
+    def test_fan32_hgi_probe_not_counted_as_fan_request(self) -> None:
+        """An HGI's RQ 2411 probe must not count as fan-request evidence —
+        gateway-originated probing says nothing about how bound devices
+        treat the target."""
+        gwy = make_mock_gateway(known_list={"32:090174": {"class": "FAN"}})
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(
+                src="18:000001",
+                dst="32:090174",
+                code=Code._2411,
+                verb=Verb.RQ,
+            )
+        )
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(src="32:090174", code=Code._1298, verb=Verb.I_)
+            )
+        dev = scan.get_device("32:090174")
+        assert dev is not None
+        assert dev.fan_requests_received == 0
+        assert dev.likely_type == DevType.CO2
+        scan.stop()
+
+    def test_unknown_32_pure_co2_self_corrects(self) -> None:
+        """An unknown 32: device is created as FAN (prefix) but the
+        enrich path re-classifies it to CO2 on the next I 1298 — no
+        known_list declaration needed."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        for _ in range(2):
+            scan._process_packet(
+                make_dto(src="32:092927", code=Code._1298, verb=Verb.I_)
+            )
+        dev = scan.get_device("32:092927")
+        assert dev is not None
+        assert dev.likely_type == DevType.CO2
+        scan.stop()
+
+    def test_fan_requests_received_survives_export_import(self) -> None:
+        """fan_requests_received round-trips through JSON export/import."""
+        gwy = make_mock_gateway(known_list={"32:150000": {"class": "FAN"}})
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(
+                src="37:169161",
+                dst="32:150000",
+                code=Code._2411,
+                verb=Verb.RQ,
+            )
+        )
+        exported = scan.export_json()
+
+        scan2 = DiscoveryScan(make_mock_gateway())
+        scan2.import_json(exported)
+        dev = scan2.get_device("32:150000")
+        assert dev is not None
+        assert dev.fan_requests_received == 1
+        scan.stop()
+        scan2.stop()
