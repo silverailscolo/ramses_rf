@@ -30,65 +30,113 @@ _31D9_ORCON_MODE_NAMES: dict[str, str] = {
     "07": "off",
 }
 
-# 22F3 timed boost commands (7-byte Orcon format).
-# Payload: 00 12 <mins> <speed> 04 04 04
-# Speed: 01=low, 02=medium, 03=high
-# Durations: 0F=15, 1E=30, 3C=60 minutes
+# 22F3 timed boost commands (7-byte Orcon format), built structurally
+# rather than tabulated per variant (issue ramses-rf/ramses_cc#1332):
+#
+#   byte0 hdr     : 00
+#   byte1 flags   : 0x12 on classic remotes, 0x02 on newer models (e.g.
+#                   VMN-15LF01) — flags & 0x10 maps to
+#                   fallback_speed_mode, flags & 0x40 means the duration
+#                   is in hours rather than minutes
+#   byte2 duration: minutes (×60 when the hours flag is set)
+#   byte3 speed   : 01=low, 02=medium, 03=high
+#   bytes4-6 tail : fallback mode/fan + pad — "04 04 04" on classic
+#                   remotes, "04 00 00" observed on the 0x02 dialect
+#
+# The flag/tail differences are per-remote-model dialects, so they are
+# parameters of the builder/matcher below, not separate command names.
+_ORCON_BOOST_SPEEDS: dict[str, int] = {
+    "low": 0x01,
+    "medium": 0x02,
+    "high": 0x03,
+}
+_ORCON_BOOST_SPEED_NAMES: dict[int, str] = {
+    v: k for k, v in _ORCON_BOOST_SPEEDS.items()
+}
+_ORCON_BOOST_DURATIONS: tuple[int, ...] = (15, 30, 60)
+_ORCON_BOOST_FLAGS = 0x12
+_ORCON_BOOST_TAIL = b"\x04\x04\x04"
+_ORCON_BOOST_LEN = 7  # bytes
+
+
+def _orcon_boost_payload(
+    speed: str | int,
+    minutes: int,
+    *,
+    flags: int = _ORCON_BOOST_FLAGS,
+    tail: bytes = _ORCON_BOOST_TAIL,
+) -> str:
+    """Assemble a 7-byte Orcon 22F3 boost payload from building blocks.
+
+    :param speed: Speed name ("low"/"medium"/"high") or byte (0x01-0x03).
+    :type speed: str | int
+    :param minutes: Boost duration in minutes (1-255, or a multiple of
+        60 up to 15300 which is encoded via the hours flag).
+    :type minutes: int
+    :param flags: Flags byte — dialect-dependent (0x12 or 0x02).
+    :type flags: int
+    :param tail: Bytes 4-6 (fallback mode/fan + pad), dialect-dependent.
+    :type tail: bytes
+    :returns: The 14-char payload hex string.
+    :rtype: str
+    """
+    speed_byte = (
+        _ORCON_BOOST_SPEEDS.get(speed, -1) if isinstance(speed, str) else speed
+    )
+    if speed_byte not in _ORCON_BOOST_SPEED_NAMES:
+        raise ValueError(f"Invalid 22F3 boost speed: {speed!r}")
+    if len(tail) != _ORCON_BOOST_LEN - 4:
+        raise ValueError(f"Invalid 22F3 tail length: {len(tail)}")
+    if minutes <= 0 or minutes > 0xFF * 60:
+        raise ValueError(f"Invalid 22F3 boost duration: {minutes}")
+    if minutes <= 0xFF:
+        duration = minutes
+    elif minutes % 60 == 0:
+        flags |= 0x40  # duration encoded in hours
+        duration = minutes // 60
+    else:
+        raise ValueError(f"Invalid 22F3 boost duration: {minutes}")
+    return (bytes([0x00, flags, duration, speed_byte]) + tail).hex().upper()
+
+
+def _orcon_boost_command_name(payload: str) -> str | None:
+    """Attribute a canonical boost name to an Orcon 22F3 payload.
+
+    Structural match: extracts the duration and speed bytes, tolerating
+    flag/tail dialect differences between remote models — e.g.
+    ``00120F03040404`` and ``00020F03040000`` both map to ``high_15``
+    (issue ramses-rf/ramses_cc#1332).
+
+    :param payload: The 14-char 22F3 payload hex string.
+    :type payload: str
+    :returns: The canonical ``<speed>_<minutes>`` name, or None if the
+        payload is not a recognizable Orcon timed-boost frame.
+    :rtype: str | None
+    """
+    if len(payload) != _ORCON_BOOST_LEN * 2:
+        return None
+    try:
+        raw = bytes.fromhex(payload)
+    except ValueError:
+        return None
+    speed_name = _ORCON_BOOST_SPEED_NAMES.get(raw[3])
+    if raw[0] != 0x00 or speed_name is None:
+        return None
+    minutes = raw[2] * 60 if raw[1] & 0x40 else raw[2]
+    if minutes <= 0:
+        return None
+    return f"{speed_name}_{minutes}"
+
+
 _ORCON_BOOST_COMMANDS: dict[str, dict[str, str]] = {
-    "low_15": {
+    f"{speed}_{minutes}": {
         "verb": "I",
         "code": Code._22F3,
-        "payload": "00120F01040404",
+        "payload": _orcon_boost_payload(speed, minutes),
         "type": "boost_timer",
-    },
-    "low_30": {
-        "verb": "I",
-        "code": Code._22F3,
-        "payload": "00121E01040404",
-        "type": "boost_timer",
-    },
-    "low_60": {
-        "verb": "I",
-        "code": Code._22F3,
-        "payload": "00123C01040404",
-        "type": "boost_timer",
-    },
-    "medium_15": {
-        "verb": "I",
-        "code": Code._22F3,
-        "payload": "00120F02040404",
-        "type": "boost_timer",
-    },
-    "medium_30": {
-        "verb": "I",
-        "code": Code._22F3,
-        "payload": "00121E02040404",
-        "type": "boost_timer",
-    },
-    "medium_60": {
-        "verb": "I",
-        "code": Code._22F3,
-        "payload": "00123C02040404",
-        "type": "boost_timer",
-    },
-    "high_15": {
-        "verb": "I",
-        "code": Code._22F3,
-        "payload": "00120F03040404",
-        "type": "boost_timer",
-    },
-    "high_30": {
-        "verb": "I",
-        "code": Code._22F3,
-        "payload": "00121E03040404",
-        "type": "boost_timer",
-    },
-    "high_60": {
-        "verb": "I",
-        "code": Code._22F3,
-        "payload": "00123C03040404",
-        "type": "boost_timer",
-    },
+    }
+    for speed in _ORCON_BOOST_SPEEDS
+    for minutes in _ORCON_BOOST_DURATIONS
 }
 
 
@@ -149,6 +197,29 @@ class OrconStrategy(HvacStrategyBase):
                 mutated["fan_mode"] = mode
             mutated["exhaust_fan_speed"] = None
         return super().apply_quirk(mutated, current_state, msg_code)
+
+    def boost_command_name(self, code: Code | str, payload: str) -> str | None:
+        """Attribute a canonical boost name to an observed 22F3 payload."""
+        if code == Code._22F3:
+            return _orcon_boost_command_name(payload)
+        return None
+
+    def boost_timer_payload(
+        self,
+        speed: str,
+        minutes: int,
+        *,
+        flags: int = _ORCON_BOOST_FLAGS,
+        tail: bytes = _ORCON_BOOST_TAIL,
+    ) -> str:
+        """Assemble an Orcon 22F3 timed-boost payload (issue 1332).
+
+        ``flags``/``tail`` select the remote-model dialect: classic
+        remotes use ``flags=0x12``/``tail=04 04 04`` (the default, as in
+        ``_builtin_commands``), while e.g. the VMN-15LF01 emits
+        ``flags=0x02``/``tail=04 00 00``.
+        """
+        return _orcon_boost_payload(speed, minutes, flags=flags, tail=tail)
 
     def co2_binding_codes(
         self,
