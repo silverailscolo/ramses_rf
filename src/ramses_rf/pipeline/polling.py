@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Final
 
-from ramses_rf.const import Code, DevType
+from ramses_rf.const import FF, Code, DevType
 from ramses_rf.devices.helpers import build_rq_cmd
 from ramses_rf.exceptions import RamsesException
 from ramses_rf.helpers import schedule_task
@@ -34,6 +34,12 @@ INTERVAL_EVERY_6_HOURS: Final[int] = 21600  # 6 hours in seconds
 INTERVAL_EVERY_12_HOURS: Final[int] = 43200  # 12 hours in seconds
 INTERVAL_DAILY: Final[int] = 86400  # 24 hours in seconds
 INTERVAL_ZONE_TEMP: Final[int] = 900  # 15 minutes — zone temperature polling
+# Keep-alive poll interval for FANs.  Must stay below
+# HEARTBEAT_TIMEOUT_FAN (15 min): some FANs broadcast far less often
+# than the ~90s cycle the heartbeat assumes (once per ~8h reported), so
+# without a reply-generating poll their entities go unavailable
+# (ramses-rf/ramses_rf issue 1288).  RP replies stamp device liveness.
+INTERVAL_FAN_KEEP_ALIVE: Final[int] = 600  # 10 minutes
 # First-poll delay for the Evohome system mode (2E04).  Cached 2E04
 # packets are no longer replayed on restore (a stale mode would be
 # presented as authoritative), so the real mode is fetched shortly
@@ -94,8 +100,11 @@ DEFAULT_POLLING_SCHEDULES: Final[dict[str, dict[Code | str, int | None]]] = {
     },
     # HVAC Ventilation Fan
     DevType.FAN: {
-        Code._10E0: INTERVAL_DAILY,  # Device Specification / Info
-        Code._10D0: INTERVAL_DAILY,  # Filter Change Sensor Status
+        Code._10E0: INTERVAL_FAN_KEEP_ALIVE,  # Device Info — liveness poll
+        Code._10D0: INTERVAL_DAILY,  # Filter — re-probe until supported
+        # Once a FAN has confirmed 10D0 support, the roles swap: 10D0
+        # replies carry both filter data and liveness at keep-alive rate,
+        # and 10E0 drops back to daily — see resolve_schedule_for_device.
         # 3150 (fan speed / heat demand) is NOT polled — FANs broadcast
         # I/3150 unsolicited but do not respond to RQ/3150.  Polling them
         # generates "Unexpected verb/code for dst (FAN) to Rx" warnings
@@ -204,6 +213,9 @@ class PollingManager:
         self._tasks: dict[tuple[str, ...], PollingTask] = {}
         self._poller_task: asyncio.Task[object] | None = None
         self._running: bool = False
+        # Set when tasks are added/rescheduled so a sleeping poll loop
+        # re-evaluates immediately instead of waiting out its old sleep.
+        self._wake_event = asyncio.Event()
 
     @property
     def is_running(self) -> bool:
@@ -253,6 +265,18 @@ class PollingManager:
         # Override with explicit SSOT schema traits if provided
         if device.polling_interval is not None:
             schedule.update(device.polling_interval)
+
+        # FAN keep-alive role swap (issue 1288): until the device confirms
+        # 10D0 support, the universally-answered 10E0 provides liveness at
+        # keep-alive rate and 10D0 only re-probes daily.  Once supported,
+        # 10D0 replies carry liveness *and* filter data, so 10E0 drops back
+        # to a daily refresh.  Explicit per-device overrides win either way.
+        user_intervals = device.polling_interval or {}
+        if slug == DevType.FAN and getattr(device, "supports_10d0", False):
+            if Code._10E0 not in user_intervals:
+                schedule[Code._10E0] = INTERVAL_DAILY
+            if Code._10D0 not in user_intervals:
+                schedule[Code._10D0] = INTERVAL_FAN_KEEP_ALIVE
 
         # Filter out disabled entries (None or <= 0) to return active intervals only
         return {
@@ -348,9 +372,14 @@ class PollingManager:
                             next_due=now + td(seconds=interval),
                             payload=payload,
                         )
+                        self._wake_event.set()
                     else:
-                        self._tasks[zkey].interval = interval
-                        self._tasks[zkey].payload = payload
+                        task = self._tasks[zkey]
+                        if task.interval != interval:
+                            task.next_due = now + td(seconds=interval)
+                            task.interval = interval
+                            self._wake_event.set()
+                        task.payload = payload
             elif code == Code._2349 and zone_indexs:
                 # Expand into per-zone tasks (all zones — mode is needed
                 # regardless of whether the zone has a sensor).  2349 RQ
@@ -367,9 +396,14 @@ class PollingManager:
                             next_due=now + td(seconds=interval),
                             payload=payload,
                         )
+                        self._wake_event.set()
                     else:
-                        self._tasks[zkey].interval = interval
-                        self._tasks[zkey].payload = payload
+                        task = self._tasks[zkey]
+                        if task.interval != interval:
+                            task.next_due = now + td(seconds=interval)
+                            task.interval = interval
+                            self._wake_event.set()
+                        task.payload = payload
             elif code == Code._30C9 and zone_indexs_no_sensor:
                 # Expand into per-zone tasks (only zones without a sensor)
                 for zone_index in zone_indexs_no_sensor:
@@ -384,9 +418,14 @@ class PollingManager:
                             next_due=now + td(seconds=interval),
                             payload=payload,
                         )
+                        self._wake_event.set()
                     else:
-                        self._tasks[zkey].interval = interval
-                        self._tasks[zkey].payload = payload
+                        task = self._tasks[zkey]
+                        if task.interval != interval:
+                            task.next_due = now + td(seconds=interval)
+                            task.interval = interval
+                            self._wake_event.set()
+                        task.payload = payload
             elif code == Code._3220 and slug == DevType.OTB:
                 # Expand into per-Data-ID OpenTherm query tasks
                 for data_id in OPENTHERM_POLL_DATA_IDS:
@@ -401,9 +440,14 @@ class PollingManager:
                             next_due=now + td(seconds=interval),
                             payload=payload,
                         )
+                        self._wake_event.set()
                     else:
-                        self._tasks[ot_key].interval = interval
-                        self._tasks[ot_key].payload = payload
+                        task = self._tasks[ot_key]
+                        if task.interval != interval:
+                            task.next_due = now + td(seconds=interval)
+                            task.interval = interval
+                            self._wake_event.set()
+                        task.payload = payload
             else:
                 dkey = (device.id, code)
                 active_keys.add(dkey)
@@ -411,7 +455,12 @@ class PollingManager:
                     # 2E04 gets an early first poll so the real system
                     # mode is hydrated shortly after startup instead of
                     # after a full daily interval (issue
-                    # ramses-rf/ramses_cc#1242).
+                    # ramses-rf/ramses_cc#1242).  Its RQ payload must be
+                    # FF — the canonical payload used by
+                    # build_get_system_mode and seen in all real-world
+                    # RQ|2E04 captures; the generic "00" fallback may
+                    # not be answered by every controller
+                    # (ramses-rf/ramses_cc#1323).
                     delay = (
                         INTERVAL_STARTUP_2E04
                         if code == Code._2E04
@@ -422,9 +471,19 @@ class PollingManager:
                         code=code,
                         interval=interval,
                         next_due=now + td(seconds=delay),
+                        payload=FF if code == Code._2E04 else None,
                     )
+                    self._wake_event.set()
                 else:
-                    self._tasks[dkey].interval = interval
+                    task = self._tasks[dkey]
+                    if task.interval != interval:
+                        # Reschedule from now so the new cadence applies
+                        # at once — e.g. the 10E0/10D0 keep-alive swap
+                        # when supports_10d0 is confirmed (issue 1288),
+                        # or a user polling_interval override.
+                        task.next_due = now + td(seconds=interval)
+                        task.interval = interval
+                        self._wake_event.set()
 
         return active_keys
 
@@ -485,8 +544,15 @@ class PollingManager:
             except (RamsesException, TimeoutError) as err:
                 _LOGGER.error("Error in PollingManager loop: %s", err)
 
+            # Clear before computing the sleep so a concurrent schedule
+            # update is either reflected in the computed interval or
+            # leaves the event set for the wait below — no lost wake-up.
+            self._wake_event.clear()
             sleep_secs = self._calculate_next_sleep_interval()
-            await asyncio.sleep(sleep_secs)
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(
+                    self._wake_event.wait(), timeout=sleep_secs
+                )
 
     async def poll_due_commands(self) -> int:
         """Evaluate tracked tasks and process commands that are due.

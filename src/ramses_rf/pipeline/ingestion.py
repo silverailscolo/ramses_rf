@@ -194,7 +194,7 @@ from ramses_rf.state_projector import (
 )
 from ramses_rf.typing import PayloadT
 from ramses_tx import Priority
-from ramses_tx.const import I_, RQ, Code
+from ramses_tx.const import I_, RQ, W_, Code
 
 if TYPE_CHECKING:
     from ramses_rf.devices.dev_base import DeviceHeat
@@ -1063,6 +1063,15 @@ class StateProjector:
     ) -> None:
         """Translate system configuration opcodes into SystemState."""
         if msg.code not in (Code._0100, Code._2E04, Code._313F, Code._2D49):
+            return
+
+        # A W 2E04 is our own command echo (HGI -> CTL): it carries the
+        # *requested* mode, not the controller's confirmed state.  When
+        # nothing changes (e.g. auto_with_reset while already in auto)
+        # the controller sends no I 2E04, so the echoed request would
+        # stick as phantom state (ramses_cc issue 1323).  Only project
+        # the controller's confirmed mode (I/RP).
+        if msg.code == Code._2E04 and msg.verb == W_:
             return
 
         updates: PayloadT = {}
