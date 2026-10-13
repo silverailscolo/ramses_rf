@@ -32,12 +32,14 @@ from ramses_rf.enums import DevType, PumpRelayState
 from ramses_rf.models import (
     HvacState,
     StateUpdatedEvent,
+    SystemState,
     UfhCircuitState,
     UfhState,
 )
 from ramses_rf.pipeline.ingestion import StateProjector
 from ramses_rf.state_projector import (
     _update_hvac_state as _sp_update_hvac_state,
+    _update_system_state as _sp_update_system_state,
 )
 from ramses_tx.address import NON_DEV_ADDR, Address
 from ramses_tx.const import Code, Verb
@@ -390,6 +392,80 @@ def test_update_ufh_state_timestamp_propagation() -> None:
     assert target.ufh_state.last_updated == test_dtm
     assert target.ufh_state.circuits["02"].last_updated == test_dtm
     assert target.received_events[0].state.last_updated == test_dtm
+
+
+class MockTcsTarget:
+    """Mock target representing an evohome controller (TCS, 01:)."""
+
+    _SLUG = DevType.CTL
+    id = "01:150000"
+
+    def __init__(self) -> None:
+        self.system_state: SystemState = SystemState()
+        self.received_events: list[StateUpdatedEvent] = []
+
+    def apply_state_update(self, event: StateUpdatedEvent) -> None:
+        if isinstance(event.state, SystemState):
+            self.system_state = event.state
+            self.received_events.append(event)
+
+
+def test_update_system_state_w_echo_not_projected() -> None:
+    # A W 2E04 is our own command echo: it carries the *requested* mode,
+    # not the controller's confirmed state.  If nothing changes (e.g.
+    # auto_with_reset while already in auto) no I 2E04 follows and the
+    # echoed mode would stick as phantom state (ramses_cc issue 1323).
+    # Arrange
+    projector = StateProjector(MagicMock(), MagicMock())
+    target = MockTcsTarget()
+
+    msg = _make_msg(Code._2E04, src="18:001234")
+    msg.verb = Verb.W_
+    msg.dst = Address("01:150000")
+    payload = {"system_mode": "auto_with_reset", "until": None}
+
+    # Act
+    projector._update_system_state(target, payload, msg)
+
+    # Assert
+    assert target.system_state.system_mode is None
+    assert len(target.received_events) == 0
+
+
+def test_update_system_state_i_broadcast_projected() -> None:
+    # An I 2E04 is the controller's confirmed mode and must be projected.
+    # Arrange
+    projector = StateProjector(MagicMock(), MagicMock())
+    target = MockTcsTarget()
+
+    msg = _make_msg(Code._2E04, src="01:150000")
+    msg.verb = Verb.I_
+    payload = {"system_mode": "away", "until": None}
+
+    # Act
+    projector._update_system_state(target, payload, msg)
+
+    # Assert
+    assert target.system_state.system_mode == "away"
+    assert len(target.received_events) == 1
+
+
+def test_legacy_update_system_state_w_echo_not_projected() -> None:
+    # Same guard for the registry-based projector path.
+    # Arrange
+    target = MockTcsTarget()
+
+    msg = _make_msg(Code._2E04, src="18:001234")
+    msg.verb = Verb.W_
+    msg.dst = Address("01:150000")
+    payload = {"system_mode": "auto_with_reset", "until": None}
+
+    # Act
+    _sp_update_system_state(target, payload, msg)
+
+    # Assert
+    assert target.system_state.system_mode is None
+    assert len(target.received_events) == 0
 
 
 class MockRemTarget:

@@ -12,7 +12,7 @@ from datetime import datetime as dt
 from typing import TYPE_CHECKING, Final, cast
 
 from ramses_rf.typing import SchemaT
-from ramses_tx.const import RQ, Code
+from ramses_tx.const import RQ, W_, Code
 
 from . import exceptions as exc, quirks
 from .const import (
@@ -321,7 +321,21 @@ def _resolve_logical_targets(
         )
         if is_ctl_idx:
             if zone := tcs.zone_by_index.get(p[SZ_ZONE_INDEX]):
-                if zone not in targets:
+                # An addressed 30C9 from a non-controller (e.g. a TRV
+                # reporting to the CTL) carries the zone_index, but a zone
+                # with a designated sensor must take its temperature only
+                # from that sensor or from controller syncs — the
+                # actuator's report would otherwise briefly overwrite the
+                # zone temperature (ramses-rf/ramses_cc#1334).
+                if (
+                    not (
+                        msg.code == Code._30C9
+                        and src_type
+                        not in ("01", "02", DevType.CTL, DevType.UFC)
+                        and _has_designated_sensor(zone, src_dev, msg.src.id)
+                    )
+                    and zone not in targets
+                ):
                     targets.append(zone)
 
     # 5. Domain twins (TCS, DHW) get updates.
@@ -398,6 +412,28 @@ def _resolve_logical_targets(
     return targets
 
 
+def _has_designated_sensor(
+    zone: Entity, src_dev: Entity | None, src_id: str
+) -> bool:
+    """Return True if ``zone`` designates a sensor other than ``src``.
+
+    A zone with a bound or schema-declared sensor takes its temperature
+    only from that sensor (or controller syncs): an actuator's 30C9 must
+    not overwrite it.  Sensorless zones (no bound and no declared sensor)
+    keep the sole-actuator behaviour of issues 976/1328.
+
+    :param zone: The zone resolved from the packet's zone_index.
+    :param src_dev: The source device of the inbound message, or None.
+    :param src_id: The source device id of the inbound message.
+    :return: True when a different sensor is designated for the zone.
+    """
+    sensor = getattr(zone, "sensor", None)
+    declared = getattr(zone, "_declared_sensor_id", None)
+    if src_dev is sensor or src_id == declared:
+        return False
+    return sensor is not None or declared is not None
+
+
 def _zones_by_declared_sensor(
     gateway: Gateway, registry: DeviceRegistryInterface | None, src_id: str
 ) -> list[Entity]:
@@ -456,6 +492,15 @@ def _update_system_state(
         SystemState | None, getattr(target, "system_state", None)
     )
     if system_state is None or not dataclasses.is_dataclass(system_state):
+        return
+
+    # A W 2E04 is our own command echo (HGI -> CTL): it carries the
+    # *requested* mode, not the controller's confirmed state.  When
+    # nothing changes (e.g. auto_with_reset while already in auto)
+    # the controller sends no I 2E04, so the echoed request would
+    # stick as phantom state (ramses_cc issue 1323).  Only project
+    # the controller's confirmed mode (I/RP).
+    if msg.code == Code._2E04 and msg.verb == W_:
         return
 
     updates: SchemaT = {}

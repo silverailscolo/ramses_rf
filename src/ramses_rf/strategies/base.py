@@ -116,6 +116,24 @@ class HvacStrategy(Protocol):
         """
         ...
 
+    def boost_command_name(self, code: Code | str, payload: str) -> str | None:
+        """Canonical builtin boost-timer name for an observed payload.
+
+        Structural match: strategies that support 22F3-style timed
+        boosts map a received payload to one of their
+        ``builtin_commands`` names (e.g. ``"high_15"``), tolerating
+        per-model dialect differences in the non-semantic bytes.
+
+        :param code: The opcode of the inbound frame.
+        :type code: Code | str
+        :param payload: The payload hex string.
+        :type payload: str
+        :returns: The canonical command name, or None if the frame is
+            not a recognizable boost command for this vendor.
+        :rtype: str | None
+        """
+        ...
+
 
 @runtime_checkable
 class VentilationControlStrategy(Protocol):
@@ -423,3 +441,21 @@ class HvacStrategyBase:
         :rtype: dict[str, dict[str, str]]
         """
         return dict(self._builtin_commands)
+
+    def boost_command_name(self, code: Code | str, payload: str) -> str | None:
+        """Canonical builtin boost-timer name for an observed payload.
+
+        Structural match: strategies that support 22F3-style timed
+        boosts map a received payload to one of their
+        ``builtin_commands`` names (e.g. ``"high_15"``), tolerating
+        per-model dialect differences in the non-semantic bytes.
+
+        :param code: The opcode of the inbound frame.
+        :type code: Code | str
+        :param payload: The payload hex string.
+        :type payload: str
+        :returns: The canonical command name, or None if the frame is
+            not a recognizable boost command for this vendor.
+        :rtype: str | None
+        """
+        return None
