@@ -587,6 +587,9 @@ def test_build_get_fan_10d0(snapshot: Any) -> None:
     assert str(dto.verb) == Verb.RQ
     assert str(dto.code) == Code._10D0
     assert dto.payload == "00"
+    assert dto.addr1 == "18:000730"
+    assert dto.addr2 == "32:111111"
+    assert dto.addr3 == "--:------"
 
 
 def test_build_get_hvac_fan_31da(snapshot: Any) -> None:
