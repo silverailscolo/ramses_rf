@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Final
 
-from ramses_rf.const import Code, DevType
+from ramses_rf.const import FF, Code, DevType
 from ramses_rf.devices.helpers import build_rq_cmd
 from ramses_rf.exceptions import RamsesException
 from ramses_rf.helpers import schedule_task
@@ -411,7 +411,12 @@ class PollingManager:
                     # 2E04 gets an early first poll so the real system
                     # mode is hydrated shortly after startup instead of
                     # after a full daily interval (issue
-                    # ramses-rf/ramses_cc#1242).
+                    # ramses-rf/ramses_cc#1242).  Its RQ payload must be
+                    # FF — the canonical payload used by
+                    # build_get_system_mode and seen in all real-world
+                    # RQ|2E04 captures; the generic "00" fallback may
+                    # not be answered by every controller
+                    # (ramses-rf/ramses_cc#1323).
                     delay = (
                         INTERVAL_STARTUP_2E04
                         if code == Code._2E04
@@ -422,6 +427,7 @@ class PollingManager:
                         code=code,
                         interval=interval,
                         next_due=now + td(seconds=delay),
+                        payload=FF if code == Code._2E04 else None,
                     )
                 else:
                     self._tasks[dkey].interval = interval

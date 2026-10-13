@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from ramses_rf.config import GatewayConfig, strip_and_map_traits
-from ramses_rf.const import Code, DevType, Verb
+from ramses_rf.const import FF, Code, DevType, Verb
 from ramses_rf.devices.dev_base import BatteryState, DeviceBase
 from ramses_rf.exceptions import RamsesException
 from ramses_rf.gateway import Gateway
@@ -475,12 +475,52 @@ def test_polling_manager_2e04_first_poll_is_early(
     # ASSERT
     tasks = {t.code: t for t in poller.get_scheduled_cmds()}
     assert tasks[Code._2E04].interval == INTERVAL_DAILY
+    assert tasks[Code._2E04].payload == FF
     assert (
         now + td(seconds=INTERVAL_STARTUP_2E04)
         <= tasks[Code._2E04].next_due
         <= after + td(seconds=INTERVAL_STARTUP_2E04)
     )
     assert tasks[Code._10E0].next_due - now > td(hours=23)
+
+
+@pytest.mark.asyncio
+async def test_polling_manager_2e04_rq_uses_ff_payload(
+    mock_gateway: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The 2E04 poll RQ must use payload FF, not the generic "00".
+
+    FF is the canonical RQ|2E04 payload used by build_get_system_mode
+    and seen in all real-world captures; a "00" payload may not be
+    answered by every controller, leaving system_mode unhydrated
+    (ramses-rf/ramses_cc#1323).
+    """
+    # ARRANGE
+    monkeypatch.setattr("asyncio.sleep", AsyncMock())
+    poller = PollingManager(mock_gateway, shadow_mode=False)
+    ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
+    mock_gateway.device_registry.devices = [ctl_dev]
+    poller.update_device_tasks(ctl_dev)
+
+    # Fast-forward all tasks to trigger due commands
+    past = dt.now(UTC) - td(seconds=10)
+    for task in poller.get_scheduled_cmds():
+        task.next_due = past
+
+    # ACT
+    await poller.poll_due_commands()
+
+    # ASSERT: find the 2E04 call and check its payload
+    for call in mock_gateway._async_send_dto.call_args_list:
+        dto: CommandDTO = call.args[0]
+        if dto.code == Code._2E04:
+            assert dto.payload == FF, (
+                f"Expected 2E04 payload 'FF', got '{dto.payload}'"
+            )
+            break
+    else:
+        pytest.fail("No 2E04 RQ was sent")
 
 
 @pytest.mark.asyncio
