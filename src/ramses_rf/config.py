@@ -6,10 +6,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Final, Literal, Never, TypeVar
+from typing import Final, Literal, Never, TypeVar
 
 import probatio as vol
 
+from ramses_rf.typing import SchemaT
 from ramses_tx.config import EngineConfig
 from ramses_tx.const import DEVICE_ID_REGEX
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_KNOWN_LIST
@@ -181,7 +182,7 @@ _TRAIT_KEY_MAP: Final[dict[str, str]] = {
 _TRAIT_PRESERVE_KEYS: Final[frozenset[str]] = frozenset({"_name"})
 
 
-def strip_and_map_traits(traits: dict[str, Any]) -> dict[str, Any]:
+def strip_and_map_traits(traits: SchemaT) -> SchemaT:
     """Strip ramses_cc-only ``_``-prefixed keys and map known ones to native traits.
 
     This is the ramses_rf side of the schema transformation pipeline:
@@ -206,7 +207,7 @@ def strip_and_map_traits(traits: dict[str, Any]) -> dict[str, Any]:
         ``_``-prefixed ramses_cc extension keys.
     :return: A new dict with ``_`` keys stripped or mapped to native names.
     """
-    result: dict[str, Any] = {}
+    result: SchemaT = {}
     for key, value in traits.items():
         if not isinstance(key, str) or not key.startswith("_"):
             # Non-_ key: recurse if dict, pass through otherwise
@@ -233,7 +234,7 @@ def strip_and_map_traits(traits: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def strip_traits(traits: dict[str, Any]) -> dict[str, Any]:
+def strip_traits(traits: SchemaT) -> SchemaT:
     """Recursively strip all ``_``-prefixed keys from a dict.
 
     Stage 1 only (no mapping).  Used by ramses_cc's
@@ -247,7 +248,7 @@ def strip_traits(traits: dict[str, Any]) -> dict[str, Any]:
     :param traits: A dict possibly containing ``_``-prefixed keys.
     :return: A new dict with all ``_`` keys removed.
     """
-    result: dict[str, Any] = {}
+    result: SchemaT = {}
     for key, value in traits.items():
         if isinstance(key, str) and key.startswith("_"):
             continue
@@ -258,7 +259,7 @@ def strip_traits(traits: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def strip_and_map_schema(schema: dict[str, Any]) -> dict[str, Any]:
+def strip_and_map_schema(schema: SchemaT) -> SchemaT:
     """Apply :func:`strip_and_map_traits` to every device entry in a schema.
 
     Walks a schema dict and applies the strip+map pipeline to each
@@ -276,7 +277,7 @@ def strip_and_map_schema(schema: dict[str, Any]) -> dict[str, Any]:
         dicts as values.
     :return: A new schema dict with ``_`` keys stripped/mapped per device.
     """
-    result: dict[str, Any] = {}
+    result: SchemaT = {}
     for key, value in schema.items():
         if isinstance(value, dict) and isinstance(key, str):
             # Could be a device entry (key is a device ID) or a
@@ -309,7 +310,7 @@ class GatewayConfig:
     :param use_native_ot: Preference for using native OpenTherm.
     :type use_native_ot: Literal["always", "prefer", "avoid", "never"] | None
     :param schema: Dictionary representing the schema.
-    :type schema: dict[str, Any]
+    :type schema: SchemaT
     :param debug_mode: If True, set the logger to debug mode.
     :type debug_mode: bool
     :param gateway_timeout: Custom timeout threshold in minutes.
@@ -317,9 +318,9 @@ class GatewayConfig:
     :param database_path: Target disk path for SQLite DB logging, or None to disable.
     :type database_path: str | None
     :param known_list: A list of known device IDs and their traits.
-    :type known_list: dict[str, Any]
+    :type known_list: SchemaT
     :param block_list: A list of blocked device IDs.
-    :type block_list: dict[str, Any]
+    :type block_list: SchemaT
     :param engine: Typed configuration object for the Transport layer.
     :type engine: EngineConfig
     :param hgi_id: The explicit Device ID of the active HGI hardware.
@@ -335,7 +336,7 @@ class GatewayConfig:
     enforce_strict_handling: bool = False
     use_native_ot: Literal["always", "prefer", "avoid", "never"] | None = None
 
-    schema: dict[str, Any] = field(default_factory=dict)
+    schema: SchemaT = field(default_factory=dict)
     debug_mode: bool = False
     gateway_timeout: int | None = None
     database_path: str | None = "ramses.db"
@@ -348,7 +349,7 @@ class GatewayConfig:
 
     hgi_id: str | None = None
 
-    def __setattr__(self, name: str, value: Any) -> None:
+    def __setattr__(self, name: str, value: object) -> None:
         """Keep disable_polling and disable_discovery synchronized natively."""
         super().__setattr__(name, value)
         if value is not None:

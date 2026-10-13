@@ -6,9 +6,10 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ramses_rf.config import SZ_CLASS
+from ramses_rf.typing import SchemaT
 from ramses_tx.const import Code
 from ramses_tx.typing import DeviceIdT
 
@@ -29,6 +30,7 @@ from .eavesdropper import EavesdropEngine
 from .messages import Message
 
 if TYPE_CHECKING:
+    from .devices.dev_base import Device
     from .gateway import Gateway
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,13 +52,11 @@ class TopologyBuilder:
         """
         self._gateway = gateway
 
-    async def update_topology(
-        self, payload: dict[str, Any], msg: Message
-    ) -> None:
+    async def update_topology(self, payload: SchemaT, msg: Message) -> None:
         """Process a decoded payload and update topology models.
 
         :param payload: The payload dictionary.
-        :type payload: dict[str, Any]
+        :type payload: SchemaT
         :param msg: The raw message object.
         :type msg: Message
         """
@@ -64,14 +64,14 @@ class TopologyBuilder:
 
 
 async def update_topology_schema_state(
-    gateway: Gateway, p: dict[str, Any], msg: Message
+    gateway: Gateway, p: SchemaT, msg: Message
 ) -> None:
     """Discover and instantiate schema entities (TCS, zones, DHW, UFH) from packets.
 
     :param gateway: The gateway handling entity instantiation.
     :type gateway: Gateway
     :param p: Decoded payload dictionary.
-    :type p: dict[str, Any]
+    :type p: SchemaT
     :param msg: Message object containing headers and routing addrs.
     :type msg: Message
     """
@@ -143,7 +143,7 @@ async def update_topology_schema_state(
                     isinstance(z_type, str)
                     and z_type in ZON_ROLE_MAP.HEAT_ZONES
                 ):
-                    schema: dict[str, Any] = {"class": ZON_ROLE_MAP[z_type]}
+                    schema: SchemaT = {"class": ZON_ROLE_MAP[z_type]}
                     if zone_mask := p.get("zone_mask"):
                         for bit_index, active in enumerate(zone_mask):
                             if active:
@@ -200,7 +200,7 @@ async def update_topology_schema_state(
                 or p.get("domain_id")
                 or p.get("domain_index")
             )
-            devices = p.get(SZ_DEVICES, p.get("devices", []))
+            devices = p.get(SZ_DEVICES, p.get("devices", [])) or []
             if "device_id" in p and not devices:
                 devices = [p["device_id"]]
 
@@ -213,7 +213,7 @@ async def update_topology_schema_state(
             )
 
             # Instantiate any 02: UFH Controller devices and link as children of TCS
-            ufc_devs: list[Any] = []
+            ufc_devs: list[Device] = []
             if registry and tcs:
                 for d_id in devices:
                     if getattr(d_id, "type", str(d_id)[:2]) in (
@@ -427,7 +427,7 @@ async def update_topology_schema_state(
 
         # 4. Code 0204: Underfloor Heating (UFH) Controller Circuits
         case Code._0204:
-            ufc_list: list[Any] = []
+            ufc_list: list[Device] = []
             if registry:
                 if getattr(msg.src, "type", None) in ("02", DevType.UFC):
                     with contextlib.suppress(exc.DeviceNotFoundError):

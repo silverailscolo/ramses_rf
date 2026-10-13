@@ -9,9 +9,10 @@ See :doc:`roadmap item 5 <https://github.com/ramses-rf/ramses_rf/issues/1093>`.
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from ramses_rf.models import HvacState
+from ramses_rf.typing import SchemaT
 from ramses_tx.const import Code, IndexT
 
 
@@ -73,20 +74,20 @@ class HvacStrategy(Protocol):
 
     def apply_quirk(
         self,
-        payload: dict[str, Any],
+        payload: SchemaT,
         current_state: HvacState | None,
         msg_code: Code | str,
-    ) -> dict[str, Any]:
+    ) -> SchemaT:
         """Apply vendor-specific payload transformations.
 
         :param payload: The flattened, canonical telemetry dictionary.
-        :type payload: dict[str, Any]
+        :type payload: SchemaT
         :param current_state: The existing Read-Model for the device.
         :type current_state: HvacState | None
         :param msg_code: The hex opcode of the incoming message.
         :type msg_code: Code | str
         :returns: The safely mutated telemetry dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         ...
 
@@ -255,10 +256,10 @@ class HvacStrategyBase:
 
     def apply_quirk(
         self,
-        payload: dict[str, Any],
+        payload: SchemaT,
         current_state: HvacState | None,
         msg_code: Code | str,
-    ) -> dict[str, Any]:
+    ) -> SchemaT:
         """Apply all-vendor normalisations.
 
         Vendor-specific quirks are handled by subclass overrides
@@ -266,13 +267,13 @@ class HvacStrategyBase:
         vendor-specific logic.
 
         :param payload: The flattened, canonical telemetry dictionary.
-        :type payload: dict[str, Any]
+        :type payload: SchemaT
         :param current_state: The existing Read-Model for the device.
         :type current_state: HvacState | None
         :param msg_code: The hex opcode of the incoming message.
         :type msg_code: Code | str
         :returns: The safely mutated telemetry dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         mutated = dict(payload)
 

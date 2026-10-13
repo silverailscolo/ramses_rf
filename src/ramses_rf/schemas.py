@@ -26,7 +26,7 @@ from ramses_rf.const import (
     SZ_ZONE_TYPE,
     SZ_ZONES,
 )
-from ramses_rf.typing import DeviceIdT, DeviceListT
+from ramses_rf.typing import DeviceIdT, DeviceListT, SchemaT
 from ramses_tx.const import DEFAULT_MAX_ZONES, DEVICE_ID_REGEX
 from ramses_tx.schemas import (
     SCH_ENGINE_DICT,
@@ -100,7 +100,7 @@ SCH_ZON_INDEX = vol.Match(
 )  # TODO: what if > 12 zones? (e.g. hometronics)
 
 
-def error_renamed_key(new_key: str) -> Callable[[Any], None]:
+def error_renamed_key(new_key: str) -> Callable[[object], None]:
     """Return a probatio validator function raising an invalid key error.
 
     :param new_key: The new key name to instruct the user to rename to.
@@ -109,7 +109,7 @@ def error_renamed_key(new_key: str) -> Callable[[Any], None]:
     :rtype: Callable[[Any], None]
     """
 
-    def renamed_key(node_value: Any) -> None:
+    def renamed_key(node_value: object) -> None:
         raise vol.Invalid(
             f"the key name has changed: rename it to '{new_key}'"
         )
@@ -355,7 +355,7 @@ SCH_RESTORE_CACHE_DICT = {
 
 #
 # 7/7: Other stuff
-def _get_device(
+def _get_device(  # type: ignore[explicit-any]  # schema-tree kwargs
     gateway: Gateway, device_id: DeviceIdT, **kwargs: Any
 ) -> Device:  # , **traits
     """Get a device from the gateway.
@@ -393,9 +393,9 @@ def _get_device(
     return device
 
 
-def load_schema(
-    gateway: Any,
-    known_list: DeviceListT | dict[str, Any] | None = None,
+def load_schema(  # type: ignore[explicit-any]  # schema-tree kwargs
+    gateway: Gateway,
+    known_list: DeviceListT | SchemaT | None = None,
     **schema: Any,
 ) -> None:
     """Instantiate all entities in the schema, and faked devices in the known_list.
@@ -443,9 +443,7 @@ def load_schema(
                 device._make_fake()
 
 
-def load_fan(
-    gateway: Gateway, fan_id: DeviceIdT, schema: dict[str, Any]
-) -> Device:
+def load_fan(gateway: Gateway, fan_id: DeviceIdT, schema: SchemaT) -> Device:
     """Create a FAN using its schema (i.e. with remotes, sensors).
 
     :param gateway: The Gateway instance managing the device.
@@ -453,7 +451,7 @@ def load_fan(
     :param fan_id: The device ID of the FAN entity.
     :type fan_id: DeviceIdT
     :param schema: The schema dictionary for the FAN entity.
-    :type schema: dict[str, Any]
+    :type schema: SchemaT
     :returns: The created or retrieved FAN device instance.
     :rtype: Device
     """
@@ -465,7 +463,7 @@ def load_fan(
 
 
 def _load_ufh_system(
-    gateway: Gateway, tcs: SystemBase, ufh_system: Any
+    gateway: Gateway, tcs: SystemBase, ufh_system: SchemaT | None
 ) -> None:
     """Hydrate UFH controllers and circuits from system schema.
 
@@ -476,7 +474,7 @@ def _load_ufh_system(
     if not isinstance(ufh_system, dict):
         return
 
-    zones_map: dict[str, Any] = getattr(tcs, "zone_by_index", {})
+    zones_map: SchemaT = getattr(tcs, "zone_by_index", {})
     device_registry = getattr(gateway, "device_registry", None)
     cqrs_actuators: dict[str, set[str]] = getattr(
         device_registry, "_cqrs_actuators", {}
@@ -486,7 +484,7 @@ def _load_ufh_system(
         if not isinstance(ufc_schema, dict):
             continue
 
-        ufc = _get_device(gateway, device_id, parent=tcs)
+        ufc = _get_device(gateway, DeviceIdT(device_id), parent=tcs)
         if not hasattr(ufc, "get_circuit"):
             continue
 
@@ -512,7 +510,7 @@ def _load_ufh_system(
 
 
 def load_tcs(
-    gateway: Gateway, controller_id: DeviceIdT, schema: dict[str, Any]
+    gateway: Gateway, controller_id: DeviceIdT, schema: SchemaT
 ) -> SystemBase:
     """Create a TCS using its schema.
 
@@ -521,7 +519,7 @@ def load_tcs(
     :param controller_id: The controller device ID for the TCS.
     :type controller_id: DeviceIdT
     :param schema: The schema dictionary for the TCS.
-    :type schema: dict[str, Any]
+    :type schema: SchemaT
     :returns: The created or retrieved TCS instance.
     :rtype: SystemBase
     """
@@ -595,7 +593,7 @@ _DEPRECATED_IMPORTS: Final = {
 }
 
 
-def __getattr__(name: str) -> Any:
+def __getattr__(name: str) -> Any:  # type: ignore[explicit-any]  # deprecated-imports shim
     """Resolve deprecated re-exports with a warning.
 
     :param name: The name of the attribute to retrieve.

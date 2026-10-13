@@ -9,9 +9,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import ItemsView, KeysView, ValuesView
 from dataclasses import dataclass
-from typing import Any, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from .adapters import payload_to_dict
+
+if TYPE_CHECKING:
+    from ramses_rf.typing import PayloadT
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,17 +49,19 @@ class PayloadBase(ABC):
         """
         ...
 
-    def to_dict(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    def to_dict(  # type: ignore[explicit-any]  # compat shim: subclasses vary
+        self, *args: Any, **kwargs: Any
+    ) -> PayloadT:
         """Convert payload dataclass to legacy dictionary format.
 
         :param args: Optional positional arguments for compatibility.
         :param kwargs: Optional keyword arguments for compatibility.
         :returns: Dictionary representation of the payload.
-        :rtype: dict[str, Any]
+        :rtype: PayloadT
         """
         return payload_to_dict(self)
 
-    def __getitem__(self, key: str) -> Any:
+    def __getitem__(self, key: str) -> Any:  # type: ignore[explicit-any]  # dict-compat shim
         """Access payload field via dictionary lookup for legacy compatibility.
 
         :param key: Field name key.
@@ -81,7 +86,9 @@ class PayloadBase(ABC):
         result_dict = self.to_dict()
         return key in result_dict if isinstance(result_dict, dict) else False
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(  # type: ignore[explicit-any]  # dict-compat shim
+        self, key: str, default: Any = None
+    ) -> Any:
         """Get value for key with optional fallback default.
 
         :param key: Field name key.
@@ -109,7 +116,7 @@ class PayloadBase(ABC):
             result_dict.keys() if isinstance(result_dict, dict) else {}.keys()
         )
 
-    def values(self) -> ValuesView[Any]:
+    def values(self) -> ValuesView[object]:
         """Return dictionary values view for legacy compatibility.
 
         :returns: Values view.
@@ -122,7 +129,7 @@ class PayloadBase(ABC):
             else {}.values()
         )
 
-    def items(self) -> ItemsView[str, Any]:
+    def items(self) -> ItemsView[str, object]:
         """Return dictionary items view for legacy compatibility.
 
         :returns: Items view.

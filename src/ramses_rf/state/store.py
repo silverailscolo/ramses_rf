@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, NewType
 import orjson
 
 from ramses_rf.interfaces import MessageStoreInterface
+from ramses_rf.typing import SchemaT
 from ramses_tx import RP, RQ, Code, Packet
 
 from ..exceptions import DatabaseQueryError
@@ -60,7 +61,7 @@ def _setup_db_adapters() -> None:
     sqlite3.register_converter("DTM", convert_datetime)
 
 
-def payload_keys(parsed_payload: list[dict[str, Any]] | dict[str, Any]) -> str:
+def payload_keys(parsed_payload: list[SchemaT] | SchemaT) -> str:
     """Copy payload keys for fast query check.
 
     :param parsed_payload: pre-parsed message payload dict
@@ -68,7 +69,7 @@ def payload_keys(parsed_payload: list[dict[str, Any]] | dict[str, Any]) -> str:
     """
     _keys: str = "|"
 
-    def append_keys(ppl: dict[str, Any]) -> str:
+    def append_keys(ppl: SchemaT) -> str:
         _ks: str = ""
         for key, value in ppl.items():
             if (
@@ -305,7 +306,9 @@ class MessageStore(MessageStoreInterface):
         if cx is None:
             return
 
-        def _fetch_all(conn: sqlite3.Connection) -> list[Any]:
+        def _fetch_all(  # type: ignore[explicit-any]  # heterogeneous sqlite rows
+            conn: sqlite3.Connection,
+        ) -> list[Any]:
             return conn.execute(
                 "SELECT * FROM messages ORDER BY dtm ASC"
             ).fetchall()
@@ -529,7 +532,7 @@ class MessageStore(MessageStoreInterface):
         destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
-        context: Any | None = None,
+        context: object | None = None,
         hdr: str | StateHeader | None = None,
     ) -> tuple[Message, ...] | None:
         """Remove a set of message(s) from the index."""
@@ -604,7 +607,7 @@ class MessageStore(MessageStoreInterface):
         destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
-        context: Any | None = None,
+        context: object | None = None,
         hdr: str | StateHeader | None = None,
     ) -> tuple[Message, ...]:
         """Public method to get a set of message(s) from the index."""
@@ -684,7 +687,7 @@ class MessageStore(MessageStoreInterface):
         destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
-        context: Any | None = None,
+        context: object | None = None,
         hdr: str | StateHeader | None = None,
     ) -> bool:
         """Return True if matching records exist for given fields."""

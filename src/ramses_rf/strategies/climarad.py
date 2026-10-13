@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from ramses_rf.const import SZ_REL_HUMIDITY
 from ramses_rf.models import HvacState
 from ramses_rf.models.hvac_schemas import _22F1_MODE_MAX, _22F1_MODE_VASCO
 from ramses_rf.strategies.base import HvacStrategyBase
 from ramses_rf.strategies.vasco import _VASCO_BOOST_COMMANDS
+from ramses_rf.typing import SchemaT
 from ramses_tx.const import Code
 
 
@@ -34,20 +33,20 @@ class ClimaRadStrategy(HvacStrategyBase):
 
     def apply_quirk(
         self,
-        payload: dict[str, Any],
+        payload: SchemaT,
         current_state: HvacState | None,
         msg_code: Code | str,
-    ) -> dict[str, Any]:
+    ) -> SchemaT:
         """Apply ClimaRad-specific payload transformations.
 
         :param payload: The flattened, canonical telemetry dictionary.
-        :type payload: dict[str, Any]
+        :type payload: SchemaT
         :param current_state: The existing Read-Model for the device.
         :type current_state: HvacState | None
         :param msg_code: The hex opcode of the incoming message.
         :type msg_code: Code | str
         :returns: The safely mutated telemetry dictionary.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         # STRUCTURAL QUIRK: 12A0 Array Elements (ClimaRad Ventura V1x)
         # The parser returns list elements with an 'hvac_index'. We must map

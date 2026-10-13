@@ -10,10 +10,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ramses_tx.const import Code, Verb
 from ramses_tx.typing import DeviceIdT
+
+if TYPE_CHECKING:
+    pass
 
 
 class EventTopic(StrEnum):
@@ -56,7 +59,7 @@ class RoutingContext:
         return str(self.value)
 
 
-def extract_context_value(
+def extract_context_value(  # type: ignore[explicit-any]  # duck-typed payload/str/None
     payload: Any, raw_payload: str = "", code: str | Code | None = None
 ) -> str | None:
     """Extract the primary routing context discriminator from a payload or string.

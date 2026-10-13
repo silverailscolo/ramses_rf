@@ -20,6 +20,7 @@ from ramses_rf.models import (
     DeviceTraits,
     JimStateDTO,
 )
+from ramses_rf.typing import SchemaT
 from ramses_tx import Priority
 from ramses_tx.const import SZ_PRIORITY, Code
 from ramses_tx.typing import PayDictT
@@ -89,7 +90,7 @@ class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
         """
         return await self.bdr_state()
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
@@ -108,7 +109,7 @@ class HeatDemand(DeviceHeat):  # 3150
         """Return the current heat demand percentage (0.0 to 1.0)."""
         return self.demand_state.heat_demand
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
@@ -139,7 +140,7 @@ class RelayDemand(DeviceHeat):  # 0008
         """Return the current relay demand percentage (0.0 to 1.0)."""
         return self.demand_state.relay_demand
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
@@ -177,7 +178,7 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
         """
         return HEARTBEAT_TIMEOUT_BDR
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         """Initialize the BDR switch device."""
@@ -219,7 +220,7 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
         """Return the TPI configuration parameters (1100) or None."""
         return await self.entity_state.get_value(Code._1100)
 
-    async def schema(self) -> dict[str, Any]:
+    async def schema(self) -> SchemaT:
         """Return the device configuration schema."""
         base_schema = await super().schema()
         return {
@@ -227,7 +228,7 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
             "role": await self.role(),
         }
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return the device parameter dictionary."""
         base_params = await super().params()
         return {
@@ -235,7 +236,7 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
             self.TPI_PARAMS: await self.tpi_params(),
         }
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
@@ -262,7 +263,7 @@ class JimDevice(Actuator):  # BDR (08):
         """
         return HEARTBEAT_TIMEOUT_BDR
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         """Initialize the JIM device."""
@@ -288,7 +289,7 @@ class JimDevice(Actuator):  # BDR (08):
             last_updated=state.last_updated,
         )
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
@@ -313,7 +314,7 @@ class JstDevice(RelayDemand):  # BDR (31):
         """
         return HEARTBEAT_TIMEOUT_BDR
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous construction/schema kwargs
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         """Initialize the JST device."""

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
+from typing import Protocol
 
 from ramses_rf.address import HGI_DEV_ADDR, Address
 from ramses_rf.commands.core import Command as Intent
 from ramses_rf.enums import Action
 from ramses_rf.interfaces import DeviceInterface, GatewayInterface
 from ramses_rf.messages import Message
+from ramses_rf.typing import SchemaT
 from ramses_tx import Priority
 
 
@@ -26,7 +27,7 @@ _LOGGER = logging.getLogger(__name__)
 async def send_system_intent(
     system: _SystemEntity,
     action: Action,
-    data: dict[str, Any],
+    data: SchemaT,
     wait_for_reply: bool | None = None,
 ) -> Message:
     """Dispatch system intent from the HGI to the CTL.

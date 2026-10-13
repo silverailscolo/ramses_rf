@@ -18,6 +18,7 @@ from ramses_rf.const import (
     SZ_ZONE_INDEX,
 )
 from ramses_rf.payloads import get_payload_class
+from ramses_rf.payloads.base import PayloadBase
 from ramses_rf.protocol.ramses import (
     CODE_INDEX_ARE_COMPLEX,
     CODE_INDEX_ARE_NONE,
@@ -27,6 +28,7 @@ from ramses_rf.protocol.ramses import (
     RQ_INDEX_COMPLEX,
     RQ_NO_PAYLOAD,
 )
+from ramses_rf.typing import PayloadT
 from ramses_tx import exceptions as exc
 from ramses_tx.const import I_, RQ, Code
 from ramses_tx.dtos import PacketDTO
@@ -67,7 +69,7 @@ class _LegacyAddress:
             address_string.split(":")[0] if ":" in address_string else ""
         )
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         """Evaluate equality based on address ID.
 
         :param other: The other object to compare against.
@@ -385,9 +387,7 @@ def _build_index_dict(msg: _LegacyMessage) -> dict[str, str]:
     return {index_name: index_val}
 
 
-def parse_unknown_payload(
-    raw_payload: str, msg: _LegacyMessage
-) -> dict[str, Any]:
+def parse_unknown_payload(raw_payload: str, msg: _LegacyMessage) -> PayloadT:
     """Apply a generic parser for unrecognized packet codes.
 
     :param raw_payload: The raw hex string of the packet payload.
@@ -395,7 +395,7 @@ def parse_unknown_payload(
     :param msg: The legacy message abstraction layer object.
     :type msg: _LegacyMessage
     :returns: Standard structural error dictionaries or generic payloads.
-    :rtype: dict[str, Any]
+    :rtype: PayloadT
     """
     if msg.len == 2 and raw_payload[:2] == "00":
         return {
@@ -421,9 +421,7 @@ def parse_unknown_payload(
     }
 
 
-def parse_heartbeat_payload(
-    raw_payload: str, msg: _LegacyMessage
-) -> dict[str, Any]:
+def parse_heartbeat_payload(raw_payload: str, msg: _LegacyMessage) -> PayloadT:
     """Parse a 1-byte heartbeat packet (payload '00').
 
     :param raw_payload: The raw packet payload value string.
@@ -431,7 +429,7 @@ def parse_heartbeat_payload(
     :param msg: The legacy structural envelope message object.
     :type msg: _LegacyMessage
     :returns: Decoded validation flags.
-    :rtype: dict[str, Any]
+    :rtype: PayloadT
     """
     return {"heartbeat": True}
 
@@ -461,7 +459,7 @@ class PayloadDecoder(ABC):
         raw_payload: str,
         payload_len: int,
         msg: _LegacyMessage,
-    ) -> dict[str, Any] | list[dict[str, Any]] | None:
+    ) -> PayloadT | list[PayloadT] | None:
         """Decode the payload.
 
         :param dto: The packet raw serialization structure object.
@@ -473,7 +471,7 @@ class PayloadDecoder(ABC):
         :param msg: Internal compatibility envelope schema instance.
         :type msg: _LegacyMessage
         :returns: Extracted parser structural outputs.
-        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        :rtype: PayloadT | list[PayloadT] | None
         """
         if self._next_decoder:
             return self._next_decoder.decode(
@@ -491,7 +489,7 @@ class HeartbeatDecoder(PayloadDecoder):
         raw_payload: str,
         payload_len: int,
         msg: _LegacyMessage,
-    ) -> dict[str, Any] | list[dict[str, Any]] | None:
+    ) -> PayloadT | list[PayloadT] | None:
         """Evaluate and intercept simple heartbeat packages.
 
         :param dto: The packet raw serialization structure object.
@@ -503,7 +501,7 @@ class HeartbeatDecoder(PayloadDecoder):
         :param msg: Internal compatibility envelope schema instance.
         :type msg: _LegacyMessage
         :returns: Extracted parser structural outputs.
-        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        :rtype: PayloadT | list[PayloadT] | None
         """
         code = _get_code(dto.code)
         if not msg._has_payload and (
@@ -538,7 +536,9 @@ class HeartbeatDecoder(PayloadDecoder):
         return {}
 
 
-def _convert_to_dict(payload_obj: Any, msg: _LegacyMessage) -> Any:
+def _convert_to_dict(  # type: ignore[explicit-any]  # duck-typed payload object
+    payload_obj: Any, msg: _LegacyMessage
+) -> Any:
     """Invoke payload.to_dict safely passing msg context if supported."""
     to_dict_fn = getattr(payload_obj, "to_dict", None)
     if not callable(to_dict_fn):
@@ -550,8 +550,8 @@ def _convert_to_dict(payload_obj: Any, msg: _LegacyMessage) -> Any:
 
 
 def _inject_header_metadata(
-    res_dict: dict[str, Any], msg: _LegacyMessage, dto: PacketDTO
-) -> dict[str, Any]:
+    res_dict: PayloadT, msg: _LegacyMessage, dto: PacketDTO
+) -> PayloadT:
     """Inject packet header index metadata and sequence number into dictionary."""
     merged = _build_index_dict(msg)
     merged.update(res_dict)
@@ -565,13 +565,13 @@ class DataclassPayloadDecoder(PayloadDecoder):
 
     def _aggregate_zone_devices(
         self,
-        payload_list: list[Any],
+        payload_list: list[PayloadBase],
         msg: _LegacyMessage,
         dto: PacketDTO,
-    ) -> dict[str, Any] | None:
+    ) -> PayloadT | None:
         """Combine multi-chunk 000C device binding items into a single dictionary."""
         dev_ids: list[str] = []
-        base_dict: dict[str, Any] | None = None
+        base_dict: PayloadT | None = None
         for item in payload_list:
             if isinstance(d := _convert_to_dict(item, msg), dict):
                 if base_dict is None:
@@ -588,7 +588,7 @@ class DataclassPayloadDecoder(PayloadDecoder):
         raw_payload: str,
         payload_len: int,
         msg: _LegacyMessage,
-    ) -> dict[str, Any] | list[dict[str, Any]] | None:
+    ) -> PayloadT | list[PayloadT] | None:
         """Decode raw payload bytes into typed dataclass instances.
 
         :param dto: The packet raw serialization structure object.
@@ -600,7 +600,7 @@ class DataclassPayloadDecoder(PayloadDecoder):
         :param msg: Internal compatibility envelope schema instance.
         :type msg: _LegacyMessage
         :returns: Extracted parser structural outputs.
-        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        :rtype: PayloadT | list[PayloadT] | None
         """
         payload_cls = get_payload_class(dto.code)
 
@@ -615,7 +615,7 @@ class DataclassPayloadDecoder(PayloadDecoder):
                             decoded_payload, msg, dto
                         )
 
-                    converted_payloads: list[dict[str, Any]] = []
+                    converted_payloads: list[PayloadT] = []
                     for item in decoded_payload:
                         if isinstance(
                             converted_dict := _convert_to_dict(item, msg), dict
@@ -672,7 +672,7 @@ class LegacyParserDecoder(PayloadDecoder):
         raw_payload: str,
         payload_len: int,
         msg: _LegacyMessage,
-    ) -> dict[str, Any] | list[dict[str, Any]] | None:
+    ) -> PayloadT | list[PayloadT] | None:
         """Route payload to the appropriate 4-digit code parser.
 
         :param dto: The packet raw serialization structure object.
@@ -684,7 +684,7 @@ class LegacyParserDecoder(PayloadDecoder):
         :param msg: Internal compatibility envelope schema instance.
         :type msg: _LegacyMessage
         :returns: Extracted parser structural outputs.
-        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        :rtype: PayloadT | list[PayloadT] | None
         """
         if not raw_payload:
             return {}
@@ -723,15 +723,13 @@ class PayloadDecoderPipeline:
             LegacyParserDecoder()
         )
 
-    def decode(
-        self, dto: PacketDTO
-    ) -> dict[str, Any] | list[dict[str, Any]] | None:
+    def decode(self, dto: PacketDTO) -> PayloadT | list[PayloadT] | None:
         """Route tracking models cleanly through downstream chain decoders.
 
         :param dto: The network transfer packet state container model.
         :type dto: PacketDTO
         :returns: Fully structured mapping outputs or null evaluations.
-        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        :rtype: PayloadT | list[PayloadT] | None
         """
         raw_payload: str = dto.raw_payload
         try:
@@ -772,13 +770,13 @@ class PayloadDecoderPipeline:
             raise err
 
 
-def decode_packet(dto: PacketDTO) -> dict[str, Any] | list[dict[str, Any]]:
+def decode_packet(dto: PacketDTO) -> PayloadT | list[PayloadT]:
     """Entry point for the new DTO-based payload decoder.
 
     :param dto: The network protocol target transfer object packet frame.
     :type dto: PacketDTO
     :returns: Processed semantic runtime dictionary details.
-    :rtype: dict[str, Any] | list[dict[str, Any]]
+    :rtype: PayloadT | list[PayloadT]
     """
     pipeline = PayloadDecoderPipeline()
     result = pipeline.decode(dto)

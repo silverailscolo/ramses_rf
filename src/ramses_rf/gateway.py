@@ -9,10 +9,11 @@ import threading
 import warnings
 from collections.abc import Awaitable, Callable
 from logging.handlers import QueueListener
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ramses_rf.commands.dispatcher import CommandDispatcher
 from ramses_rf.const import SZ_CONFIG
+from ramses_rf.typing import SchemaT
 from ramses_tx import I_, RP, CommandDTO, Engine, Packet
 from ramses_tx.const import (
     DEFAULT_GAP_DURATION,
@@ -68,6 +69,8 @@ from .typing import DeviceIdT
 if TYPE_CHECKING:
     from ramses_tx import RamsesTransportT
 
+    from .eavesdropper import EavesdropEngine
+
 _LOGGER = logging.getLogger(__name__)
 
 #: RAMSES codes that transmit multi-packet arrays and need reassembly.
@@ -75,7 +78,9 @@ _LOGGER = logging.getLogger(__name__)
 _ARRAY_CODES: tuple[Code, ...] = (Code._000A, Code._22C9)
 
 
-def _payload_to_serialisable(payload: Any) -> Any:
+def _payload_to_serialisable(  # type: ignore[explicit-any]  # heterogeneous JSON shim
+    payload: Any,
+) -> Any:
     """Convert a payload object to a JSON-serialisable form.
 
     Payload dataclasses may contain ``bytes`` fields (e.g.
@@ -104,7 +109,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
     schema maintenance, and message dispatching.
     """
 
-    def __init__(
+    def __init__(  # type: ignore[explicit-any]  # heterogeneous config kwargs
         self,
         port_name: str | None = None,
         *,
@@ -135,7 +140,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
                 stacklevel=2,
             )
 
-            def _apply_kwargs(cfg_dict: dict[str, Any]) -> None:
+            def _apply_kwargs(cfg_dict: SchemaT) -> None:
                 """Recursively unpack nested dictionaries to apply configs."""
                 for key, value in cfg_dict.items():
                     if hasattr(self._gwy_config.engine, key):
@@ -213,10 +218,10 @@ class Gateway(GatewayLifecycle, GatewayInterface):
                 ):
                     stripped_ctl[SZ_ZONES][z_idx]["_name"] = z_entry["_name"]
 
-        self._schema: dict[str, Any] = SCH_GLOBAL_SCHEMAS(stripped)
+        self._schema: SchemaT = SCH_GLOBAL_SCHEMAS(stripped)
 
         self._tcs: Evohome | None = None
-        self._eavesdrop_engine: Any = None
+        self._eavesdrop_engine: EavesdropEngine | None = None
 
         self._device_filter: DeviceFilterInterface = DeviceFilter(
             include=[DeviceIdT(k) for k in self._gwy_config.known_list],
@@ -285,7 +290,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         )
         self._polling_manager = PollingManager(self, shadow_mode=False)
 
-    def _lookup_device_class(self, device_id: str) -> dict[str, Any] | None:
+    def _lookup_device_class(self, device_id: str) -> SchemaT | None:
         """Look up the current device traits for a device_id.
 
         Used by topology handlers to detect contradictions between
@@ -295,7 +300,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         :type device_id: str
         :returns: A dict with keys "class" (device slug), "locked"
             (whether the user has locked the class), and "faked", or None.
-        :rtype: dict[str, Any] | None
+        :rtype: SchemaT | None
         """
         device = self._device_registry.device_by_id.get(DeviceIdT(device_id))
         if not device:
@@ -377,7 +382,10 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         if not self._engine.transport:
             return None
         if device_id := self._engine.transport.get_extra_info(SZ_ACTIVE_HGI):
-            return self.device_registry.device_by_id.get(device_id)
+            return cast(
+                HgiGateway | None,
+                self.device_registry.device_by_id.get(device_id),
+            )
         return None
 
     def update_message_history(self, msg: ApplicationMessage) -> None:
@@ -402,7 +410,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         return self._tcs
 
     @property
-    def transport_info(self) -> dict[str, Any]:
+    def transport_info(self) -> SchemaT:
         """Return a snapshot of the bound transport for diagnostics.
 
         Includes the transport class name, the active HGI id, the pool
@@ -410,7 +418,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         dict when no transport is bound (e.g. before start).
 
         :returns: Transport info dict.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         transport = self._engine.transport
         if transport is None:
@@ -422,7 +430,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             "tx_rate": transport.get_extra_info("tx_rate"),
         }
 
-    async def config_snapshot(self) -> dict[str, Any]:
+    async def config_snapshot(self) -> SchemaT:
         """Return a snapshot of the gateway configuration.
 
         Covers the active HGI, the main controller, the known/block
@@ -431,7 +439,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         issue 1214).
 
         :returns: Configuration snapshot dict.
-        :rtype: dict[str, Any]
+        :rtype: SchemaT
         """
         return {
             "_gateway_id": self.hgi.id if self.hgi else None,
@@ -444,7 +452,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             "_unwanted": sorted(self._engine._unwanted),
         }
 
-    async def _config(self) -> dict[str, Any]:
+    async def _config(self) -> SchemaT:
         """Backward-compatible alias of :meth:`config_snapshot`."""
         return await self.config_snapshot()
 
@@ -485,11 +493,9 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         if asyncio.iscoroutine(result):
             await result
 
-    async def schema(self) -> dict[str, Any]:
+    async def schema(self) -> SchemaT:
         """Return the entire gateway and device topology schema."""
-        schema: dict[str, Any] = {
-            SZ_MAIN_TCS: self.tcs.ctl.id if self.tcs else None
-        }
+        schema: SchemaT = {SZ_MAIN_TCS: self.tcs.ctl.id if self.tcs else None}
         for tcs in self.device_registry.systems:
             schema[tcs.ctl.id] = await tcs.schema()
         # Include FAN/VCS topology (remotes/sensors membership) so that
@@ -507,11 +513,11 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         ] = await self.device_registry.get_hvac_orphans()
         return schema
 
-    async def params(self) -> dict[str, Any]:
+    async def params(self) -> SchemaT:
         """Return parameters across all registered devices."""
         return await self.device_registry.params()
 
-    async def status(self) -> dict[str, Any]:
+    async def status(self) -> SchemaT:
         """Return operational status across all registered devices."""
         status_dict = await self.device_registry.status()
         status_dict["_tx_rate"] = self.transport_info.get("tx_rate")
@@ -519,7 +525,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
     async def get_state(
         self, include_expired: bool = False
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
+    ) -> tuple[SchemaT, SchemaT]:
         """Return the current system state for warm restarts (e.g., for HA ramses_cc).
 
         This returns a tuple of (schema, packets). The packets payload is sourced
@@ -531,9 +537,9 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         :param include_expired: Included for backward compatibility, unused.
         :type include_expired: bool
         :return: A tuple containing the schema dictionary and the state dictionary.
-        :rtype: tuple[dict[str, Any], dict[str, Any]]
+        :rtype: tuple[SchemaT, SchemaT]
         """
-        state_dict: dict[str, Any] = {}
+        state_dict: SchemaT = {}
         with self._history_lock:
             cached_messages = list(self._state_cache.values())
 
@@ -659,12 +665,12 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         """
         return self._engine.add_raw_packet_handler(msg_handler)
 
-    def add_task(self, task: asyncio.Task[Any]) -> None:
+    def add_task(self, task: asyncio.Task[object]) -> None:
         """Register a tracked asyncio task on the transport engine."""
         self._engine.add_task(task)
 
     @staticmethod
-    def create_cmd(
+    def create_cmd(  # type: ignore[explicit-any]  # heterogeneous command kwargs
         verb: Verb,
         device_id: DeviceIdT,
         code: Code,

@@ -8,14 +8,14 @@ import sys
 import time
 from collections.abc import Iterable, Mapping
 from datetime import date, datetime as dt
-from typing import Any, Literal, TypeAlias, TypeGuard, overload
+from typing import Literal, TypeAlias, TypeGuard, overload
 
 
-def is_hex_byte(value: Any) -> TypeGuard[HexByte]:
+def is_hex_byte(value: object) -> TypeGuard[HexByte]:
     """Return True if value is a 2-character hex string (1 byte).
 
     :param value: Value to validate.
-    :type value: Any
+    :type value: object
     :returns: True if value is a 2-character hex string.
     :rtype: TypeGuard[HexByte]
     """
@@ -26,11 +26,11 @@ def is_hex_byte(value: Any) -> TypeGuard[HexByte]:
     )
 
 
-def is_hex_str4(value: Any) -> TypeGuard[HexStr4]:
+def is_hex_str4(value: object) -> TypeGuard[HexStr4]:
     """Return True if value is a 4-character hex string (2 bytes).
 
     :param value: Value to validate.
-    :type value: Any
+    :type value: object
     :returns: True if value is a 4-character hex string.
     :rtype: TypeGuard[HexStr4]
     """
@@ -41,11 +41,11 @@ def is_hex_str4(value: Any) -> TypeGuard[HexStr4]:
     )
 
 
-def is_hex_str8(value: Any) -> TypeGuard[HexStr8]:
+def is_hex_str8(value: object) -> TypeGuard[HexStr8]:
     """Return True if value is an 8-character hex string (4 bytes).
 
     :param value: Value to validate.
-    :type value: Any
+    :type value: object
     :returns: True if value is an 8-character hex string.
     :rtype: TypeGuard[HexStr8]
     """
@@ -56,11 +56,11 @@ def is_hex_str8(value: Any) -> TypeGuard[HexStr8]:
     )
 
 
-def is_hex_str12(value: Any) -> TypeGuard[HexStr12]:
+def is_hex_str12(value: object) -> TypeGuard[HexStr12]:
     """Return True if value is a 12-character hex string (6 bytes).
 
     :param value: Value to validate.
-    :type value: Any
+    :type value: object
     :returns: True if value is a 12-character hex string.
     :rtype: TypeGuard[HexStr12]
     """

@@ -45,17 +45,18 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime as dt, timedelta as td
 from enum import Enum, auto
-from typing import Any, TypeAlias
+from typing import Any, TypeAlias, cast
 
 from .. import exceptions as exc
 from ..address import HGI_DEV_ADDR, Address, packet_addrs
 from ..const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code
+from ..dtos import CommandDTO
 from ..helpers import dt_now
 from ..interfaces import ProtocolInterface, TransportInterface
 from ..packet import Packet
 from ..routing import RoutedCommand, RouteRequest, SourcePolicy, WriteOutcome
 from ..rssi_tracker import POOL_TTL, POOL_WINDOW_SIZE, RssiTracker
-from ..typing import DeviceIdT, RamsesProtocolT
+from ..typing import DeviceIdT, QosParams, RamsesProtocolT
 from .base import TransportConfig
 from .callbacks import MqttPoolOutbound
 
@@ -139,7 +140,7 @@ class PoolChild:
     child_id: int
     port_name: str
     transport: TransportInterface | None = None
-    transport_obj: Any = None
+    transport_obj: TransportInterface | None = None
     connection_state: ConnectionState = ConnectionState.DISCONNECTED
     availability: NodeAvailability = NodeAvailability.OFFLINE
     hgi_id: DeviceIdT | None = None
@@ -187,7 +188,7 @@ class PoolChild:
             and (self.transport is not None or self.callback_driven)
         )
 
-    def mark_connected(self, transport_obj: Any) -> None:
+    def mark_connected(self, transport_obj: TransportInterface) -> None:
         """Mark the child as connected and capture transport metadata.
 
         A freshly connected child is considered ONLINE (healthy) until
@@ -308,13 +309,19 @@ class _ChildProtocolProxy(ProtocolInterface):
     # -- ProtocolInterface ----------------------------------------------
 
     def connection_made(
-        self, transport: Any, /, *, ramses: bool = False
+        self,
+        transport: asyncio.BaseTransport | TransportInterface,
+        /,
+        *,
+        ramses: bool = False,
     ) -> None:
         """Forward connection_made to the pool for tracking."""
         self._connected = True
         self._conn_error = None
         self._conn_event.set()
-        self._pool._on_child_connected(self._child_id, transport)
+        self._pool._on_child_connected(
+            self._child_id, cast(TransportInterface, transport)
+        )
 
     def connection_lost(self, error: Exception | None) -> None:
         """Forward connection_lost to the pool for tracking."""
@@ -348,10 +355,10 @@ class _ChildProtocolProxy(ProtocolInterface):
 
     async def send_cmd(
         self,
-        command: Any,
+        command: CommandDTO,
         /,
         *,
-        qos: Any = None,
+        qos: QosParams | None = None,
     ) -> Packet | None:
         """Not used by transports — delegated to the real protocol."""
         return await self._pool._protocol.send_cmd(command, qos=qos)
@@ -375,7 +382,7 @@ class _ChildProtocolProxy(ProtocolInterface):
         # Return the pool — callers just need a TransportInterface.
         return self._pool
 
-    def set_regex_rules(self, rules: Any) -> None:
+    def set_regex_rules(self, rules: dict[str, dict[str, str]]) -> None:
         """No-op — regex rules are set on the real protocol by the factory."""
 
 
@@ -850,7 +857,9 @@ class PooledTransport(TransportInterface):
                     self._protocol.connection_lost, None
                 )
 
-    def get_extra_info(self, name: str, default: Any = None) -> Any:
+    def get_extra_info(  # type: ignore[explicit-any]  # heterogeneous channel
+        self, name: str, default: Any = None
+    ) -> Any:
         """Return aggregate extra info from connected children.
 
         Preserves the compatibility keys consumed by ``ramses_rf`` and
@@ -1163,14 +1172,11 @@ class PooledTransport(TransportInterface):
     ) -> None:
         """Legacy outbound dispatch — delegates to the routing API.
 
-        This method is kept for backward compatibility with callers
-        that still use ``write_frame()`` directly (e.g. ``send_frame()``
-        or third-party code).  The preferred path is
-        ``prepare_command()`` + ``write_routed()``.
-
-        TODO: deprecate once every caller routes through
-        ``prepare_command()``/``write_routed()`` — this legacy path only
-        exists for direct ``write_frame()`` callers.
+        This method is retained for backward compatibility: it backs the
+        public ``send_frame()`` API and any external callers that still
+        dispatch raw frames.  All in-tree protocol callers route through
+        ``prepare_command()``/``write_routed()``, which remain the
+        preferred path.
 
         When called directly, the frame is parsed to extract the target
         device, a child is selected, and the frame is dispatched.  Source
@@ -1490,7 +1496,9 @@ class PooledTransport(TransportInterface):
             or str(child.hgi_id) in self._accepted_hgis
         )
 
-    def _on_child_connected(self, child_id: int, transport_obj: Any) -> None:
+    def _on_child_connected(
+        self, child_id: int, transport_obj: TransportInterface
+    ) -> None:
         """Mark a child as connected and capture its HGI ID."""
         child = self._child_by_id(child_id)
         if child.removed:
