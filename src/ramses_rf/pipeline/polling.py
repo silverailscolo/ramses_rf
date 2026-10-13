@@ -34,6 +34,12 @@ INTERVAL_EVERY_6_HOURS: Final[int] = 21600  # 6 hours in seconds
 INTERVAL_EVERY_12_HOURS: Final[int] = 43200  # 12 hours in seconds
 INTERVAL_DAILY: Final[int] = 86400  # 24 hours in seconds
 INTERVAL_ZONE_TEMP: Final[int] = 900  # 15 minutes — zone temperature polling
+# Keep-alive poll interval for FANs.  Must stay below
+# HEARTBEAT_TIMEOUT_FAN (15 min): some FANs broadcast far less often
+# than the ~90s cycle the heartbeat assumes (once per ~8h reported), so
+# without a reply-generating poll their entities go unavailable
+# (ramses-rf/ramses_rf issue 1288).  RP replies stamp device liveness.
+INTERVAL_FAN_KEEP_ALIVE: Final[int] = 600  # 10 minutes
 # First-poll delay for the Evohome system mode (2E04).  Cached 2E04
 # packets are no longer replayed on restore (a stale mode would be
 # presented as authoritative), so the real mode is fetched shortly
@@ -94,8 +100,11 @@ DEFAULT_POLLING_SCHEDULES: Final[dict[str, dict[Code | str, int | None]]] = {
     },
     # HVAC Ventilation Fan
     DevType.FAN: {
-        Code._10E0: INTERVAL_DAILY,  # Device Specification / Info
-        Code._10D0: INTERVAL_DAILY,  # Filter Change Sensor Status
+        Code._10E0: INTERVAL_FAN_KEEP_ALIVE,  # Device Info — liveness poll
+        Code._10D0: INTERVAL_DAILY,  # Filter — re-probe until supported
+        # Once a FAN has confirmed 10D0 support, the roles swap: 10D0
+        # replies carry both filter data and liveness at keep-alive rate,
+        # and 10E0 drops back to daily — see resolve_schedule_for_device.
         # 3150 (fan speed / heat demand) is NOT polled — FANs broadcast
         # I/3150 unsolicited but do not respond to RQ/3150.  Polling them
         # generates "Unexpected verb/code for dst (FAN) to Rx" warnings
@@ -253,6 +262,18 @@ class PollingManager:
         # Override with explicit SSOT schema traits if provided
         if device.polling_interval is not None:
             schedule.update(device.polling_interval)
+
+        # FAN keep-alive role swap (issue 1288): until the device confirms
+        # 10D0 support, the universally-answered 10E0 provides liveness at
+        # keep-alive rate and 10D0 only re-probes daily.  Once supported,
+        # 10D0 replies carry liveness *and* filter data, so 10E0 drops back
+        # to a daily refresh.  Explicit per-device overrides win either way.
+        user_intervals = device.polling_interval or {}
+        if slug == DevType.FAN and getattr(device, "supports_10d0", False):
+            if Code._10E0 not in user_intervals:
+                schedule[Code._10E0] = INTERVAL_DAILY
+            if Code._10D0 not in user_intervals:
+                schedule[Code._10D0] = INTERVAL_FAN_KEEP_ALIVE
 
         # Filter out disabled entries (None or <= 0) to return active intervals only
         return {
