@@ -12,7 +12,7 @@ from datetime import datetime as dt
 from typing import TYPE_CHECKING, Final, cast
 
 from ramses_rf.typing import SchemaT
-from ramses_tx.const import RQ, Code
+from ramses_tx.const import RQ, W_, Code
 
 from . import exceptions as exc, quirks
 from .const import (
@@ -456,6 +456,15 @@ def _update_system_state(
         SystemState | None, getattr(target, "system_state", None)
     )
     if system_state is None or not dataclasses.is_dataclass(system_state):
+        return
+
+    # A W 2E04 is our own command echo (HGI -> CTL): it carries the
+    # *requested* mode, not the controller's confirmed state.  When
+    # nothing changes (e.g. auto_with_reset while already in auto)
+    # the controller sends no I 2E04, so the echoed request would
+    # stick as phantom state (ramses_cc issue 1323).  Only project
+    # the controller's confirmed mode (I/RP).
+    if msg.code == Code._2E04 and msg.verb == W_:
         return
 
     updates: SchemaT = {}
