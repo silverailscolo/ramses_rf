@@ -23,6 +23,9 @@ from .helpers import TEST_DIR, load_test_gwy
 
 SENSOR_DIR = Path(f"{TEST_DIR}/systems/_heat_ctl_sensor_30c9")
 SENSOR_TRV_DIR = Path(f"{TEST_DIR}/systems/_heat_ctl_sensor_30c9_trv")
+THM_SENSOR_TRV_IDX_DIR = Path(
+    f"{TEST_DIR}/systems/_heat_thm_sensor_30c9_trv_idx"
+)
 
 
 @pytest.mark.asyncio
@@ -75,6 +78,42 @@ async def test_actuator_30c9_does_not_overwrite_declared_sensor_temp() -> None:
         assert temp == 22.0, (
             f"Zone temperature overwritten by sole actuator 30C9 despite "
             f"declared sensor: {temp!r}"
+        )
+    finally:
+        await gwy.stop()
+
+
+@pytest.mark.asyncio
+async def test_indexed_actuator_30c9_does_not_overwrite_thm_sensor_temp() -> (
+    None
+):
+    """An addressed TRV->CTL 30C9 carries zone_index and routes to the zone
+    via the controller-index path, bypassing the sensor-sourced guards —
+    it must not overwrite the temperature when the zone designates a
+    THM-class sensor.
+
+    Zone 03 binds ``12:150003`` (THM) as sensor — the binding succeeds, so
+    ``zone.sensor`` is set — and ``04:150003`` (TRV) as actuator.  The TRV's
+    addressed 30C9 (``I 04:150003 01:150000 30C9 003 0307B0``) is injected
+    with ``zone_index`` by ``_build_index_dict`` and reaches the zone
+    through the controller-source/destination routing, so the
+    sole-actuator check never sees it.
+
+    See: https://github.com/ramses-rf/ramses_cc/issues/1334
+    """
+    gwy = await load_test_gwy(THM_SENSOR_TRV_IDX_DIR)
+    try:
+        tcs = gwy.tcs
+        assert tcs is not None, "no TCS loaded"
+        zone = tcs.zone_by_index.get("03")
+        assert zone is not None, "no zone 03 loaded"
+        assert zone.sensor is not None, "expected bound THM sensor"
+        assert zone.sensor.id == "12:150003"
+
+        temp = await zone.temperature()
+        assert temp == 22.0, (
+            f"Zone temperature overwritten by indexed actuator 30C9 "
+            f"despite bound THM sensor: {temp!r}"
         )
     finally:
         await gwy.stop()

@@ -238,7 +238,7 @@ class OrconStrategy(HvacStrategyBase):
 
 
 class OrconHrc350Strategy(OrconStrategy):
-    """Orcon capability profile for VMD-15RMS64/HRC-350 units."""
+    """Orcon capability profile for HRC-350 units (VMD-15RMS64, VMD-15RMS86)."""
 
     def ventilation_demand_payload(self, value: float) -> str:
         """Encode the first-domain high-resolution HRC-350 demand."""
