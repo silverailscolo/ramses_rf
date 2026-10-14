@@ -6,7 +6,7 @@
 
 ## Overview
 
-**ramses_rf** is a Python client library/CLI utility used to interface with some Honeywell-compatible HVAC & CH/DHW systems that use 868MHz RF, such as:
+**ramses_rf** is a Python 3.13-3.14 client library/CLI utility used to interface with some Honeywell-compatible HVAC & CH/DHW systems that use 868MHz RF, such as:
  - (Heat) **evohome**, **Sundial**, **Hometronic**, **Chronotherm**
  - (HVAC) **Itho**, **Orcon**, **Nuaire**, **Vasco**, **ClimaRad**
 

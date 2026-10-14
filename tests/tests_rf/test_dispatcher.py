@@ -1198,6 +1198,7 @@ class TestCommandDispatcherSend:
         fut.set_result(expected_msg)
 
         mock_conv_mgr = MagicMock()
+        mock_conv_mgr.find_pending_reply = MagicMock(return_value=None)
         mock_conv_mgr.track_intent = AsyncMock(return_value=fut)
         mock_gateway.conversation_manager = mock_conv_mgr
         mock_gateway._async_send_dto = AsyncMock(return_value=packet)

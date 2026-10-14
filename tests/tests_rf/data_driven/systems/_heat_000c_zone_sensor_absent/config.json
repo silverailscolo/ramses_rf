@@ -1,0 +1,22 @@
+{
+    "main_tcs": "01:147133",
+    "known_list": {
+        "34:218857": {"class": "RND"},
+        "04:005247": {"class": "TRV"}
+    },
+    "01:147133": {
+        "system": {},
+        "orphans": [],
+        "stored_hotwater": {},
+        "underfloor_heating": {},
+        "zones": {
+            "01": {
+                "class": "radiator_valve",
+                "actuators": [
+                    "04:005247"
+                ]
+            }
+        }
+    },
+    "orphans_heat": ["34:218857"]
+}

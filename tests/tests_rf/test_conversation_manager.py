@@ -18,7 +18,7 @@ from ramses_rf.enums import Action
 from ramses_rf.gateway import Gateway
 from ramses_rf.messages import Message
 from ramses_rf.pipeline.conversation import ConversationManager
-from ramses_tx import RP, Packet
+from ramses_tx import RP, RQ, Packet
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 from ramses_tx.helpers import dt_now
 
@@ -321,6 +321,119 @@ async def test_live_dispatcher_process_msg_routes_to_conversation_manager(
     await send_task
 
     assert gwy.conversation_manager.pending_count == 0
+
+    await gwy.stop()
+
+
+# ── Single-flight coalescing (ramses-rf/ramses_cc#1336) ───────────────
+
+
+@pytest.mark.asyncio
+async def test_find_pending_reply_matches_identical_rq() -> None:
+    """An identical in-flight RQ returns its shared reply future."""
+    # Arrange
+    loop = asyncio.get_running_loop()
+    manager = ConversationManager(
+        loop=loop, default_timeout=1.0, max_retries=2
+    )
+    intent = Command(
+        src=Address("18:000730"),
+        dst=Address("01:078710"),
+        action=Action.GET_SCHEDULE_VERSION,
+        data={},
+    )
+    dto = build_dto(intent)
+    assert dto.verb == RQ
+
+    # Act
+    fut = await manager.track_intent(intent, dto)
+    found = manager.find_pending_reply(dto)
+
+    # Assert
+    assert found is fut
+    assert manager.pending_count == 1
+
+    # The shared future resolves with the reply; the sig slot frees.
+    reply_msg = _create_mock_message(
+        verb=RP, code=dto.code, src_id="01:078710"
+    )
+    assert manager.process_msg(reply_msg) is True
+    assert fut.done()
+    assert manager.find_pending_reply(dto) is None
+
+    manager.cancel_all()
+
+
+@pytest.mark.asyncio
+async def test_find_pending_reply_ignores_w_commands() -> None:
+    """W intents are never coalesced — repeats may be intended."""
+    # Arrange
+    loop = asyncio.get_running_loop()
+    manager = ConversationManager(
+        loop=loop, default_timeout=1.0, max_retries=2
+    )
+    intent = Command(
+        src=Address("18:000730"),
+        dst=Address("01:078710"),
+        action=Action.SET_TEMPERATURE,
+        data={"zone_index": "00", "setpoint": 21.0},
+    )
+    dto = build_dto(intent)
+
+    # Act
+    await manager.track_intent(intent, dto)
+
+    # Assert
+    assert manager.find_pending_reply(dto) is None
+
+    manager.cancel_all()
+
+
+@pytest.mark.asyncio
+async def test_live_dispatcher_coalesces_identical_rq_sends(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Concurrent identical RQ sends produce a single transmission."""
+    gwy = Gateway("/dev/null")
+    mock_packet = MagicMock(spec=Packet)
+    send_mock = AsyncMock(return_value=mock_packet)
+    monkeypatch.setattr(gwy, "_async_send_dto", send_mock)
+
+    intent1 = Command(
+        src=Address("18:000730"),
+        dst=Address("01:078710"),
+        action=Action.GET_SCHEDULE_VERSION,
+        data={},
+    )
+    intent2 = Command(
+        src=Address("18:000730"),
+        dst=Address("01:078710"),
+        action=Action.GET_SCHEDULE_VERSION,
+        data={},
+    )
+
+    task1 = asyncio.create_task(
+        gwy.dispatcher.send(intent1, wait_for_reply=True)
+    )
+    await asyncio.sleep(0.01)
+    task2 = asyncio.create_task(
+        gwy.dispatcher.send(intent2, wait_for_reply=True)
+    )
+    await asyncio.sleep(0.01)
+
+    # Only one TX was queued; the second call shares the conversation.
+    assert send_mock.await_count == 1
+    assert gwy.conversation_manager.pending_count == 1
+
+    rp_frame = "000 RP --- 01:078710 18:000730 --:------ 0006 004 00050000"
+    rp_packet = Packet.from_port(dt_now(), rp_frame)
+    reply_msg = Message._from_packet(rp_packet)
+    gwy.conversation_manager.process_msg(reply_msg)
+
+    msg1 = await task1
+    msg2 = await task2
+    assert msg1 == reply_msg
+    assert msg2 == reply_msg
 
     await gwy.stop()
 

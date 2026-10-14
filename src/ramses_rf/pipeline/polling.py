@@ -46,6 +46,13 @@ INTERVAL_FAN_KEEP_ALIVE: Final[int] = 600  # 10 minutes
 # after startup rather than after a full daily interval
 # (https://github.com/ramses-rf/ramses_cc/issues/1242).
 INTERVAL_STARTUP_2E04: Final[int] = 60  # seconds after task registration
+# First-poll delay for every newly-registered task.  Without it a task
+# waits a full interval after (re)start, so hourly codes stay silent for
+# the first hour and daily codes for a day — polling looks dead after
+# every restart, and debugging restarts never reach the first poll
+# (ramses-rf/ramses_cc#1335).  Due tasks send serially with
+# POLL_INTER_CMD_GAP, so the startup burst self-paces.
+INTERVAL_STARTUP_POLL: Final[int] = 120  # seconds after task registration
 
 # Master default polling schedules table for all device classes.
 # Battery-powered devices (TRV, THM, DHW, REM, HUM) set intervals to None
@@ -82,6 +89,17 @@ DEFAULT_POLLING_SCHEDULES: Final[dict[str, dict[Code | str, int | None]]] = {
         # (auto / permanent override / temporary override).  The setpoint
         # is also in 2349, but 2309 (which IS broadcast) covers that.
         Code._2349: INTERVAL_ZONE_TEMP,  # Zone Mode (per-zone, all zones)
+        # 000C (zone device bindings) is polled per-zone for zones that
+        # have no bound sensor — see update_device_tasks for the
+        # zone-level expansion.  The CTL never broadcasts 000C; it must
+        # be polled.  The role-04 (zone_sensor) reply is the authoritative
+        # declaration of a zone's temperature sensor: a broadcast-only
+        # sensor (THM/RND) sends no zone-indexed traffic of its own, so
+        # without this poll it is never bound and the sensorless zone
+        # falls back to the sole actuator's temperature
+        # (ramses-rf/ramses_cc#1334, ramses-rf/ramses_cc#1344).  Once a
+        # sensor is bound, the task is pruned on the next refresh.
+        Code._000C: INTERVAL_EVERY_6_HOURS,  # Zone Sensor Binding (per-zone, sensorless only)
     },
     # Boiler Relay / Switch
     DevType.BDR: {
@@ -312,6 +330,17 @@ class PollingManager:
         sensor is learned, the task is pruned on the next refresh — the
         CTL's broadcast array covers that zone again.
 
+        For CTL devices with zones, the ``000C`` (zone device bindings)
+        code is expanded into one task per zone **that has no bound
+        sensor**, keyed by ``(device_id, "000C", zone_index)`` with
+        payload ``<zone_index>04`` (role 04 = zone_sensor).  The binding
+        table is the authoritative declaration of a zone's temperature
+        sensor — a broadcast-only sensor (THM/RND) never acquires a
+        zone_index from its own traffic, so without this probe it stays
+        an orphan and the zone keeps taking its temperature from the
+        sole actuator (ramses-rf/ramses_cc#1334, ramses-rf/ramses_cc#1344).
+        Once a sensor binds, the task is pruned on the next refresh.
+
         For OTB devices, the ``3220`` (OpenTherm Data ID) code is
         expanded into individual tasks per Data ID, keyed by
         ``(device_id, "3220", data_id_hex)``.  This queries status
@@ -327,12 +356,13 @@ class PollingManager:
         now = dt.now(UTC)
         active_keys: set[tuple[str, ...]] = set()
 
-        # Collect zone indices for per-zone code expansion (0004, 2349, 30C9).
-        # CTL devices have a .tcs attribute with .zones list.
+        # Collect zone indices for per-zone code expansion (0004, 000C,
+        # 2349, 30C9).  CTL devices have a .tcs attribute with .zones list.
         tcs = getattr(device, "tcs", None)
         zone_indexs: list[str] = []
         if (
             Code._0004 in schedule
+            or Code._000C in schedule
             or Code._2349 in schedule
             or Code._30C9 in schedule
         ) and tcs is not None:
@@ -343,8 +373,13 @@ class PollingManager:
         # with a sensor receive their temperature via the CTL's 30C9
         # broadcast array.  Multi-room zones (no sensor) are absent from
         # that array, so we must poll to enable eavesdropper sensor learning.
+        # 000C uses the same filter: the role-04 probe exists to discover a
+        # sensor the schema doesn't know about, so a zone that already has
+        # one doesn't need it.
         zone_indexs_no_sensor: list[str] = []
-        if Code._30C9 in schedule and tcs is not None:
+        if (
+            Code._30C9 in schedule or Code._000C in schedule
+        ) and tcs is not None:
             zone_by_index = getattr(tcs, "zone_by_index", {})
             for zi in zone_indexs:
                 zone = zone_by_index.get(zi)
@@ -369,7 +404,8 @@ class PollingManager:
                             device_id=device.id,
                             code=code,
                             interval=interval,
-                            next_due=now + td(seconds=interval),
+                            next_due=now
+                            + td(seconds=min(interval, INTERVAL_STARTUP_POLL)),
                             payload=payload,
                         )
                         self._wake_event.set()
@@ -393,7 +429,8 @@ class PollingManager:
                             device_id=device.id,
                             code=code,
                             interval=interval,
-                            next_due=now + td(seconds=interval),
+                            next_due=now
+                            + td(seconds=min(interval, INTERVAL_STARTUP_POLL)),
                             payload=payload,
                         )
                         self._wake_event.set()
@@ -415,7 +452,37 @@ class PollingManager:
                             device_id=device.id,
                             code=code,
                             interval=interval,
-                            next_due=now + td(seconds=interval),
+                            next_due=now
+                            + td(seconds=min(interval, INTERVAL_STARTUP_POLL)),
+                            payload=payload,
+                        )
+                        self._wake_event.set()
+                    else:
+                        task = self._tasks[zkey]
+                        if task.interval != interval:
+                            task.next_due = now + td(seconds=interval)
+                            task.interval = interval
+                            self._wake_event.set()
+                        task.payload = payload
+            elif code == Code._000C:
+                # Expand into per-zone tasks (only zones without a sensor).
+                # The 000C RQ payload is 2 bytes: zone_index + device_role
+                # "04" (zone_sensor) — the binding-table query that returns
+                # the zone's authoritative temperature sensor.  A zone that
+                # already has a sensor doesn't need the probe; a CTL with
+                # no zones never gets a device-level 000C task (a bare
+                # "00" payload is not a valid role query).
+                for zone_index in zone_indexs_no_sensor:
+                    zkey = (device.id, code, zone_index)
+                    active_keys.add(zkey)
+                    payload = f"{zone_index}04"
+                    if zkey not in self._tasks:
+                        self._tasks[zkey] = PollingTask(
+                            device_id=device.id,
+                            code=code,
+                            interval=interval,
+                            next_due=now
+                            + td(seconds=min(interval, INTERVAL_STARTUP_POLL)),
                             payload=payload,
                         )
                         self._wake_event.set()
@@ -437,7 +504,8 @@ class PollingManager:
                             device_id=device.id,
                             code=code,
                             interval=interval,
-                            next_due=now + td(seconds=interval),
+                            next_due=now
+                            + td(seconds=min(interval, INTERVAL_STARTUP_POLL)),
                             payload=payload,
                         )
                         self._wake_event.set()
@@ -464,7 +532,7 @@ class PollingManager:
                     delay = (
                         INTERVAL_STARTUP_2E04
                         if code == Code._2E04
-                        else interval
+                        else min(interval, INTERVAL_STARTUP_POLL)
                     )
                     self._tasks[dkey] = PollingTask(
                         device_id=device.id,

@@ -932,8 +932,14 @@ class StateProjector:
             # flagged (ramses_cc issue 1330)
             and getattr(target, "_supports_10d0", None) is False
             and (
-                payload[SZ_REMAINING_DAYS] is not None
-                or payload[SZ_REMAINING_PERCENT] is not None
+                (
+                    SZ_REMAINING_DAYS in payload
+                    and payload[SZ_REMAINING_DAYS] is not None
+                )
+                or (
+                    SZ_REMAINING_PERCENT in payload
+                    and payload[SZ_REMAINING_PERCENT] is not None
+                )
             )
         ):
             cast(HvacVentilator, target)._supports_10d0 = True
