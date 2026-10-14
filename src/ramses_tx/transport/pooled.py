@@ -45,11 +45,11 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime as dt, timedelta as td
 from enum import Enum, auto
-from typing import Any, TypeAlias, cast
+from typing import Any, TypeAlias, TypeVar, cast
 
 from .. import exceptions as exc
 from ..address import HGI_DEV_ADDR, Address, packet_addrs
-from ..const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code
+from ..const import I_, RP, RQ, SZ_ACTIVE_HGI, SZ_IS_EVOFW3, W_, Code
 from ..dtos import CommandDTO
 from ..helpers import dt_now
 from ..interfaces import ProtocolInterface, TransportInterface
@@ -91,6 +91,17 @@ _DEFAULT_MAX_CONSECUTIVE_ERRORS: int = 5
 #: When sequence is absent, the fallback base key is
 #: (verb, code, src, dst, addr3, "", raw_payload).
 _DedupKeyT: TypeAlias = tuple[str, str, str, str, str, str, str]
+
+#: TTL in seconds for recent-TX bookkeeping: after this window an
+#: inbound copy is no longer associated with a recorded transmission.
+_RECENT_TX_TTL: float = 3.0
+
+#: Reply-budget key: (reply_src, code).  An inbound RP/I packet whose
+#: source and code match an outstanding RQ/W transmission counts as a
+#: solicited reply (ramses-rf/ramses_cc#1336).
+_ReplyKeyT: TypeAlias = tuple[str, str]
+
+_CountKeyT = TypeVar("_CountKeyT")
 
 
 class ConnectionState(Enum):
@@ -466,12 +477,19 @@ class PooledTransport(TransportInterface):
         # Dict-backed dedup cache: key -> timestamp.
         # O(1) lookup instead of O(N) deque scan.
         self._dedup_cache: dict[_DedupKeyT, dt] = {}
-        # Separate cache for echo copies: every receiver's copy of a TX
-        # echo is marked, but only the first is forwarded upstream
-        # (enough for the protocol's WantEcho FSM).  Keeping it apart
-        # from _dedup_cache means echoes can never suppress a genuine
-        # frame, and a genuine frame can never suppress a needed echo.
-        self._echo_dedup_cache: dict[_DedupKeyT, dt] = {}
+        # Per-TX echo forward entitlements: each recorded transmission
+        # appends a timestamp, and one inbound echo copy is forwarded
+        # upstream per entitlement (enough for the protocol's WantEcho
+        # FSM).  Identical back-to-back transmissions produce
+        # byte-identical echoes that must each be forwarded
+        # (ramses-rf/ramses_cc#1336).  A deque per key — not a shared
+        # count — so expiry of one TX record cannot consume another
+        # identical TX's entitlement.
+        self._echo_ttl: dict[tuple[str, ...], deque[dt]] = {}
+        # Expected-reply entitlements: each RQ/W transmission lets one
+        # inbound copy of a matching reply bypass dedup, so a genuine
+        # byte-identical second reply is not dropped as a duplicate.
+        self._reply_ttl: dict[_ReplyKeyT, deque[dt]] = {}
 
         # Build immutable child registry.
         self._children: list[PoolChild] = []
@@ -507,6 +525,7 @@ class PooledTransport(TransportInterface):
         # Aggregate stats.
         self._pkts_deduped: int = 0
         self._pkts_forwarded: int = 0
+        self._pkts_reply_bypassed: int = 0
 
         # Outbound publisher for callback-driven children (PR 4A).
         # When set, children with ``callback_driven=True`` and no
@@ -776,41 +795,57 @@ class PooledTransport(TransportInterface):
             self._recent_tx_counts[tx_key] = (
                 self._recent_tx_counts.get(tx_key, 0) + 1
             )
+            # Each recorded TX entitles one inbound echo copy to be
+            # forwarded upstream (ramses-rf/ramses_cc#1336).
+            self._push_ttl(self._echo_ttl, tx_key, now)
+            # An RQ/W solicits a reply from the destination device
+            # (same code); a byte-identical second reply is genuine,
+            # not a duplicate copy (ramses-rf/ramses_cc#1336).
+            if dto.verb in (RQ, W_):
+                self._push_ttl(self._reply_ttl, (dto.addr2, dto.code), now)
         except Exception as err:  # pragma: no cover - defensive
             _LOGGER.debug("PooledTransport: failed to record TX: %s", err)
 
     def _is_recent_tx(self, packet: Packet) -> bool:
         """Check if a received packet matches a recent TX (echo).
 
-        Prunes entries older than 3.0 seconds, then does an O(1)
-        dict lookup.  HGI80 echoes arrive with the real HGI ID as
-        addr1, but the TX frame used the placeholder 18:000730 —
+        :param packet: The inbound packet to check.
+        :returns: True if the packet is an echo of a recent TX.
+        """
+        return self._match_recent_tx(packet) is not None
+
+    def _match_recent_tx(self, packet: Packet) -> tuple[str, ...] | None:
+        """Return the recent-TX key a packet matches, or None.
+
+        Prunes entries older than ``_RECENT_TX_TTL`` seconds, then does
+        an O(1) dict lookup.  HGI80 echoes arrive with the real HGI ID
+        as addr1, but the TX frame used the placeholder 18:000730 —
         both variants are checked (issue 835).
 
         The match is not consumed: in a multi-HGI pool a single TX is
         heard by several receivers (each child that picks up the frame
         over the air reports its own copy), and every copy must be
         marked as an echo.  Entries expire via the TTL prune above.
+        The returned key is the recorded-TX key that matched; callers
+        use it to claim a per-TX echo forward entitlement
+        (ramses-rf/ramses_cc#1336).
 
         :param packet: The inbound packet to check.
-        :returns: True if the packet is an echo of a recent TX.
+        :returns: The matched recent-TX key, or None.
         """
         now = dt_now()
         while (
             self._recent_tx_queue
-            and (now - self._recent_tx_queue[0][0]).total_seconds() > 3.0
+            and (now - self._recent_tx_queue[0][0]).total_seconds()
+            > _RECENT_TX_TTL
         ):
             _, old_key = self._recent_tx_queue.popleft()
-            if old_key in self._recent_tx_counts:
-                if self._recent_tx_counts[old_key] <= 1:
-                    del self._recent_tx_counts[old_key]
-                else:
-                    self._recent_tx_counts[old_key] -= 1
+            self._dec_count(self._recent_tx_counts, old_key)
 
         try:
             dto = packet._dto
         except AttributeError:
-            return False
+            return None
 
         # Always check both the received addr1 and the HGI placeholder.
         # TX may have been recorded with either the real HGI ID (evofw3)
@@ -831,8 +866,86 @@ class PooledTransport(TransportInterface):
                 dto.raw_payload,
             )
             if rx_key in self._recent_tx_counts:
-                return True
-        return False
+                return rx_key
+        return None
+
+    @staticmethod
+    def _dec_count(table: dict[_CountKeyT, int], key: _CountKeyT) -> None:
+        """Decrement a count-table entry, dropping it at zero.
+
+        :param table: The count table to update.
+        :param key: The key to decrement.
+        """
+        if key not in table:
+            return
+        if table[key] <= 1:
+            del table[key]
+        else:
+            table[key] -= 1
+
+    @staticmethod
+    def _push_ttl(
+        table: dict[_CountKeyT, deque[dt]], key: _CountKeyT, when: dt
+    ) -> None:
+        """Append a timestamped entitlement, bounded per key.
+
+        :param table: The entitlement table to update.
+        :param key: The entitlement key.
+        :param when: The recording timestamp.
+        """
+        entries = table.setdefault(key, deque())
+        if len(entries) >= _MAX_DEDUP_KEYS:
+            entries.popleft()
+        entries.append(when)
+
+    @staticmethod
+    def _take_ttl(table: dict[_CountKeyT, deque[dt]], key: _CountKeyT) -> bool:
+        """Pop the oldest unexpired entitlement for a key.
+
+        :param table: The entitlement table to consume from.
+        :param key: The entitlement key.
+        :returns: True if an entitlement existed and was consumed.
+        """
+        entries = table.get(key)
+        if not entries:
+            return False
+        now = dt_now()
+        while entries and (now - entries[0]).total_seconds() > _RECENT_TX_TTL:
+            entries.popleft()
+        if not entries:
+            return False
+        entries.popleft()
+        return True
+
+    def _consume_reply_budget(self, packet: Packet) -> bool:
+        """Consume one expected-reply entitlement matching the packet.
+
+        Only RP/I packets can be replies; the entitlement is keyed by
+        (reply source, code) and recorded per RQ/W transmission in
+        :meth:`_record_tx`.
+
+        :param packet: The inbound packet to check.
+        :returns: True if an entitlement existed and was consumed.
+        """
+        dto = packet._dto
+        if dto.verb not in (RP, I_):
+            return False
+        return self._take_ttl(self._reply_ttl, (dto.addr1, dto.code))
+
+    def _forward_to_protocol(self, packet: Packet) -> None:
+        """Schedule delivery of an inbound packet to the real protocol.
+
+        :param packet: The packet to forward upstream.
+        """
+        try:
+            self._loop.call_soon_threadsafe(
+                self._protocol.packet_received, packet
+            )
+        except RuntimeError as err:
+            _LOGGER.debug(
+                "PooledTransport: event loop closed, cannot forward: %s",
+                err,
+            )
 
     # -- TransportInterface ---------------------------------------------
 
@@ -918,6 +1031,7 @@ class PooledTransport(TransportInterface):
                 "received": [c.pkts_received for c in self._live_children],
                 "deduped": self._pkts_deduped,
                 "forwarded": self._pkts_forwarded,
+                "reply_bypassed": self._pkts_reply_bypassed,
                 "avg_rssi": [
                     round(self._best_rssi(c), 1) for c in self._live_children
                 ],
@@ -1385,18 +1499,30 @@ class PooledTransport(TransportInterface):
         # our TX can arrive via a different child than the one that
         # transmitted it.  Check the pool-level table here and mark the
         # packet as an echo so the protocol's WantEcho FSM can resolve.
-        # Echoes dedupe against a separate cache: every copy is marked,
-        # but only the first is forwarded upstream.
-        if self._is_recent_tx(packet):
+        # Echoes are forwarded against per-TX entitlements instead of a
+        # time-windowed dedup cache: identical back-to-back
+        # transmissions produce byte-identical echoes, and each one
+        # needs a forwarded copy (ramses-rf/ramses_cc#1336).
+        tx_key = self._match_recent_tx(packet)
+        if tx_key is not None:
             packet._is_echo = True
             _LOGGER.debug(
                 "PooledTransport: echo detected from child %d: %s",
                 child_id,
                 packet,
             )
-            dedup_cache = self._echo_dedup_cache
-        else:
-            dedup_cache = self._dedup_cache
+            if not self._take_ttl(self._echo_ttl, tx_key):
+                self._pkts_deduped += 1
+                _LOGGER.debug(
+                    "PooledTransport: deduped echo copy from child %d "
+                    "(TX entitlement exhausted): %s",
+                    child_id,
+                    packet,
+                )
+                return
+            self._pkts_forwarded += 1
+            self._forward_to_protocol(packet)
+            return
 
         # Dict-backed dedup with sequence-aware key.
         key = self._dedup_key(packet)
@@ -1405,39 +1531,48 @@ class PooledTransport(TransportInterface):
         # Purge stale entries from the dedup cache.
         cutoff = now - self._dedup_window
         # Collect stale keys (can't modify dict during iteration).
-        stale_keys = [k for k, t in dedup_cache.items() if t < cutoff]
+        stale_keys = [k for k, t in self._dedup_cache.items() if t < cutoff]
         for k in stale_keys:
-            del dedup_cache[k]
+            del self._dedup_cache[k]
 
         # Check for duplicate — O(1) dict lookup.
-        if key in dedup_cache:
-            self._pkts_deduped += 1
-            _LOGGER.debug(
-                "PooledTransport: deduped packet from child %d: %s",
-                child_id,
-                packet,
-            )
-            return
-
-        # Not a duplicate — record and forward.
-        dedup_cache[key] = now
-        # Enforce max cache size.
-        if len(dedup_cache) > _MAX_DEDUP_KEYS:
-            # Evict oldest entry (linear scan, but rare).
-            oldest_key = min(dedup_cache, key=lambda k: dedup_cache[k])
-            del dedup_cache[oldest_key]
+        if key in self._dedup_cache:
+            # A byte-identical copy within the window may still be a
+            # genuine reply to a second identical request — the reply
+            # entitlement recorded at TX time lets it through
+            # (ramses-rf/ramses_cc#1336).
+            if self._consume_reply_budget(packet):
+                self._pkts_reply_bypassed += 1
+                _LOGGER.debug(
+                    "PooledTransport: expected reply from child %d "
+                    "bypasses dedup: %s",
+                    child_id,
+                    packet,
+                )
+            else:
+                self._pkts_deduped += 1
+                _LOGGER.debug(
+                    "PooledTransport: deduped packet from child %d: %s",
+                    child_id,
+                    packet,
+                )
+                return
+        else:
+            # Not a duplicate — record and forward.  Consume one reply
+            # entitlement on the first copy as well, so forwarded
+            # replies stay bounded by the number of requests sent.
+            self._dedup_cache[key] = now
+            self._consume_reply_budget(packet)
+            # Enforce max cache size.
+            if len(self._dedup_cache) > _MAX_DEDUP_KEYS:
+                # Evict oldest entry (linear scan, but rare).
+                oldest_key = min(
+                    self._dedup_cache, key=lambda k: self._dedup_cache[k]
+                )
+                del self._dedup_cache[oldest_key]
 
         self._pkts_forwarded += 1
-
-        try:
-            self._loop.call_soon_threadsafe(
-                self._protocol.packet_received, packet
-            )
-        except RuntimeError as err:
-            _LOGGER.debug(
-                "PooledTransport: event loop closed, cannot forward: %s",
-                err,
-            )
+        self._forward_to_protocol(packet)
 
     @staticmethod
     def _dedup_key(packet: Packet) -> _DedupKeyT:

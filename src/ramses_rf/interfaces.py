@@ -108,6 +108,22 @@ class ConversationManagerInterface(Protocol):
         """
         ...
 
+    def find_pending_reply(
+        self, dto: CommandDTO
+    ) -> asyncio.Future[Message] | None:
+        """Return the reply future of an identical in-flight request.
+
+        Used to coalesce concurrent identical RQ intents onto a single
+        pending conversation instead of transmitting byte-identical
+        frames (ramses-rf/ramses_cc#1336).
+
+        :param dto: The compiled CommandDTO about to be sent.
+        :type dto: CommandDTO
+        :returns: The pending conversation's future, or None.
+        :rtype: asyncio.Future[Message] | None
+        """
+        ...
+
 
 class MessageStoreInterface(Protocol):
     """Protocol interface for central message store."""
