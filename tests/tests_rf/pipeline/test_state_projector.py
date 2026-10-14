@@ -455,6 +455,61 @@ def test_worker_hvac_state_parses_10d0_support() -> None:
     assert device._supports_10d0 is True
 
 
+def test_worker_hvac_state_10d0_missing_days_key() -> None:
+    """10D0 payloads lacking days_remaining must not raise KeyError.
+
+    Regression for issue 1307: a 10D0 RP such as ``00FEFE4BFFFF`` parses
+    to a payload dict that omits ``days_remaining`` entirely (FE/FF
+    markers), while ``remaining_percent`` is present.  The support check
+    previously subscripted ``p[SZ_REMAINING_DAYS]`` unconditionally.
+    """
+    device = FakeDevice()
+    device.id = "32:123456"
+    device._SLUG = DevType.FAN
+
+    registry = FakeRegistry(device)
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+
+    worker = StateProjector(gwy_adapter, queue)
+
+    mock_msg = MockMessage(
+        code=Code._10D0,
+        verb=Verb.RP,
+        payload={SZ_REMAINING_PERCENT: 37.5},
+        src_id=device.id,
+    )
+
+    worker._update_hvac_state(device, mock_msg.payload, mock_msg)
+
+    assert device.hvac_state.filter_remaining_percent == 37.5
+    assert device._supports_10d0 is True
+
+
+def test_worker_hvac_state_10d0_no_filter_fields() -> None:
+    """A 10D0 RP with neither remaining field must not flag support."""
+    device = FakeDevice()
+    device.id = "32:123456"
+    device._SLUG = DevType.FAN
+
+    registry = FakeRegistry(device)
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+
+    worker = StateProjector(gwy_adapter, queue)
+
+    mock_msg = MockMessage(
+        code=Code._10D0,
+        verb=Verb.RP,
+        payload={"hvac_id": "00"},
+        src_id=device.id,
+    )
+
+    worker._update_hvac_state(device, mock_msg.payload, mock_msg)
+
+    assert device._supports_10d0 is False
+
+
 def test_worker_opentherm_modulation_keys_parity() -> None:
     # Arrange
     device = FakeDevice()
