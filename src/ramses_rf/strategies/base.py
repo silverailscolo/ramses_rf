@@ -377,6 +377,26 @@ class HvacStrategyBase:
         """Return the generic CO2 sensor binding offer."""
         return (Code._31E0, Code._1298, Code._2E10)
 
+    async def unbind_remote(self, fan: object, device_id: str) -> bool:
+        """Release the FAN's binding slot for a REM/DIS over RF.
+
+        Contract stub for ramses_cc issue 1283: no verified unbind
+        protocol exists yet — the 1FC9 exchanges in the packet database
+        are bind handshakes only, and whether a similar sequence toggles
+        an unbind (or only a physical button gesture frees the slot) is
+        vendor/device-dependent.  Override in a vendor strategy only
+        with hardware-verified sequences; callers must treat a False
+        result as "no on-air unbind happened".
+
+        :param fan: The bound FAN device (``HvacVentilator``).
+        :type fan: object
+        :param device_id: The REM/DIS id to unbind on-air.
+        :type device_id: str
+        :return: True only when the FAN confirmed the unbind.
+        :rtype: bool
+        """
+        return False
+
     def ventilation_demand_payload(self, value: float) -> str:
         """Reject ventilation demand when the capability is unknown."""
         raise ValueError(
