@@ -36,6 +36,7 @@ from ramses_rf.discovery_scan import (
     _is_valid_address,
     _recompute_confidence,
     _should_update_domain_id,
+    dev_type_from_prefix,
 )
 from ramses_tx.const import SZ_ACTIVE_HGI
 from ramses_tx.dtos import PacketDTO
@@ -1170,6 +1171,38 @@ class TestDiscoveredDevice:
         assert dev2.device_id == dev.device_id
         assert dev2.codes_seen == dev.codes_seen
         assert dev2.rssi == dev.rssi
+
+    def test_stub_uses_prefix_derived_type(self) -> None:
+        """stub() fills likely_type from the device ID prefix."""
+        dev = DiscoveredDevice.stub("18:000730")
+        assert dev.device_id == "18:000730"
+        assert dev.likely_type == str(DevType.HGI)
+        assert dev.confidence == "low"
+
+    def test_stub_explicit_likely_type(self) -> None:
+        """stub() honours an explicit likely_type override."""
+        dev = DiscoveredDevice.stub(
+            "04:056053", likely_type="TRV", confidence="high"
+        )
+        assert dev.likely_type == "TRV"
+        assert dev.confidence == "high"
+
+    def test_stub_unknown_prefix(self) -> None:
+        """stub() falls back to "unknown" for unmapped prefixes."""
+        dev = DiscoveredDevice.stub("99:123456")
+        assert dev.likely_type == "unknown"
+
+
+class TestDevTypeFromPrefix:
+    """Tests for dev_type_from_prefix."""
+
+    def test_unambiguous_prefixes(self) -> None:
+        assert dev_type_from_prefix("18:000730") == DevType.HGI
+        assert dev_type_from_prefix("01:145038") == DevType.CTL
+        assert dev_type_from_prefix("32:123456") == DevType.FAN
+
+    def test_unknown_prefix_returns_none(self) -> None:
+        assert dev_type_from_prefix("99:123456") is None
 
 
 # ---------------------------------------------------------------------------

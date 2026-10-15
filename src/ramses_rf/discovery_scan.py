@@ -82,6 +82,24 @@ _VC_TO_TYPE: dict[tuple[str, str], DevType] = {
     (v.value, str(c)): dt for (v, c), dt in HVAC_KLASS_BY_VC_PAIR.items()
 }
 
+
+def dev_type_from_prefix(device_id: str) -> DevType | None:
+    """Return the prefix-derived DevType for a device ID, or None.
+
+    This is the scan engine's prefix fallback (``_PREFIX_TO_TYPE``):
+    exact for unambiguous prefixes (e.g. ``18:`` → ``DevType.HGI``,
+    ``01:`` → ``DevType.CTL``), a default for ambiguous HVAC prefixes
+    (``29:``/``37:`` — see ``_AMBIGUOUS_HVAC_PREFIX_TYPES``), and
+    ``None`` when the prefix is not a known RAMSES device prefix.
+
+    :param device_id: The device ID (e.g. ``"18:000730"``).
+    :type device_id: str
+    :return: The prefix-derived DevType, or None if unknown.
+    :rtype: DevType | None
+    """
+    return _PREFIX_TO_TYPE.get(device_id[:2])
+
+
 # Codes that only a CTL sends (from CODES_ONLY_FROM_CTL).
 # If a device sends one of these, it's definitely a CTL.
 # NOTE: 313F (datetime) is only CTL-only when sent as I/RP (broadcasting
@@ -387,6 +405,41 @@ class DiscoveredDevice:
         """Deserialize from a plain dict (for JSON import/resume)."""
         return cls(
             **{k: data[k] for k in data if k in cls.__dataclass_fields__}
+        )
+
+    @classmethod
+    def stub(
+        cls,
+        device_id: str,
+        *,
+        likely_type: str | None = None,
+        confidence: str = "low",
+    ) -> DiscoveredDevice:
+        """Create a placeholder entry for a device with no scan data.
+
+        Used by consumers to represent faked or restored devices that
+        the scan engine has not observed this session.  When
+        ``likely_type`` is omitted, the prefix-derived type is used
+        (``dev_type_from_prefix``), falling back to ``"unknown"``.
+
+        :param device_id: The device ID to create the stub for.
+        :type device_id: str
+        :param likely_type: Optional explicit DevType value override.
+        :type likely_type: str | None
+        :param confidence: Confidence level, ``"low"`` by default.
+        :type confidence: str
+        :return: A minimal DiscoveredDevice stub.
+        :rtype: DiscoveredDevice
+        """
+        if likely_type is None:
+            dev_type = dev_type_from_prefix(device_id)
+            likely_type = str(dev_type) if dev_type else "unknown"
+        return cls(
+            device_id=device_id,
+            first_seen="",
+            last_seen="",
+            likely_type=likely_type,
+            confidence=confidence,
         )
 
 

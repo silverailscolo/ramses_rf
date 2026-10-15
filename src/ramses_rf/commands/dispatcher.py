@@ -102,6 +102,13 @@ class CommandDispatcher:
         conv_mgr = self._gateway.conversation_manager
 
         if wait_for_reply and conv_mgr is not None:
+            # Coalesce identical in-flight RQ conversations: a second
+            # byte-identical frame's echo and reply would be dropped by
+            # pool dedup, stalling the send queue
+            # (ramses-rf/ramses_cc#1336).
+            pending_fut = conv_mgr.find_pending_reply(dto)
+            if pending_fut is not None:
+                return await asyncio.shield(pending_fut)
             rply_fut = await conv_mgr.track_intent(intent, dto)
             await self._gateway._async_send_dto(
                 dto,

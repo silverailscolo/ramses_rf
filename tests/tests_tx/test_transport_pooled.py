@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 import pytest
 
 from ramses_tx import exceptions as exc
-from ramses_tx.const import I_, SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code
+from ramses_tx.const import I_, RP, RQ, SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code
 from ramses_tx.transport.base import TransportConfig
 from ramses_tx.transport.pooled import (
     ConnectionState,
@@ -311,6 +311,174 @@ async def test_dedup_cache_size_bounded() -> None:
 
     # Cache should be capped at _MAX_DEDUP_KEYS.
     assert len(pool._dedup_cache) <= _MAX_DEDUP_KEYS
+
+
+# -- Echo budget & reply allowance (ramses-rf/ramses_cc#1336) -------------
+
+_RQ_FRAME = "RQ --- 18:001111 01:123456 --:------ 0006 001 00"
+
+
+def _record_rq(pool: PooledTransport, times: int = 1) -> None:
+    """Record *times* identical RQ 0006 transmissions on the pool."""
+    for _ in range(times):
+        pool._record_tx(_RQ_FRAME)
+
+
+def _make_echo(src: str = "18:001111") -> MagicMock:
+    """Return an echo copy of _RQ_FRAME as seen by a child."""
+    return _make_packet(
+        verb=RQ, code=Code._0006, src=src, dst="01:123456", payload="00"
+    )
+
+
+def _make_rp() -> MagicMock:
+    """Return an RP 0006 reply from the controller to the echo's RQ."""
+    return _make_packet(
+        verb=RP,
+        code=Code._0006,
+        src="01:123456",
+        dst="18:001111",
+        payload="00050000",
+    )
+
+
+async def test_each_tx_echo_is_forwarded_despite_identical_content() -> None:
+    """Two identical TXs produce two forwarded echo copies (cc#1336).
+
+    Back-to-back identical frames are byte-identical; a time-windowed
+    dedup would drop the second echo and stall the protocol's WantEcho
+    FSM for the full echo timeout.
+    """
+    proto = _make_mock_protocol()
+    t0 = _make_mock_transport(hgi="18:001111")
+    t1 = _make_mock_transport(hgi="18:002222")
+    pool = PooledTransport(
+        proto, [t0, t1], config=TransportConfig(), dedup_window=1.0
+    )
+    _connect_child(pool, 0, t0)
+    _connect_child(pool, 1, t1)
+
+    _record_rq(pool, times=2)
+
+    # Both gateways hear both transmissions: 4 identical echo copies.
+    for _ in range(2):
+        pool._on_child_packet(0, _make_echo())
+        pool._on_child_packet(1, _make_echo())
+
+    await asyncio.sleep(0.01)
+
+    assert proto.packet_received.call_count == 2
+    stats = pool.get_extra_info("pool_stats")
+    assert stats["forwarded"] == 2
+    assert stats["deduped"] == 2
+
+
+async def test_single_tx_forwards_one_echo_copy() -> None:
+    """A single TX still dedupes to one forwarded echo copy."""
+    proto = _make_mock_protocol()
+    t0 = _make_mock_transport(hgi="18:001111")
+    t1 = _make_mock_transport(hgi="18:002222")
+    pool = PooledTransport(
+        proto, [t0, t1], config=TransportConfig(), dedup_window=1.0
+    )
+    _connect_child(pool, 0, t0)
+    _connect_child(pool, 1, t1)
+
+    _record_rq(pool)
+
+    pool._on_child_packet(0, _make_echo())
+    pool._on_child_packet(1, _make_echo())
+    pool._on_child_packet(0, _make_echo())  # extra copy, e.g. relayed
+
+    await asyncio.sleep(0.01)
+
+    assert proto.packet_received.call_count == 1
+    stats = pool.get_extra_info("pool_stats")
+    assert stats["deduped"] == 2
+
+
+async def test_second_identical_reply_bypasses_dedup() -> None:
+    """A byte-identical reply to a second identical RQ is forwarded."""
+    proto = _make_mock_protocol()
+    t0 = _make_mock_transport(hgi="18:001111")
+    t1 = _make_mock_transport(hgi="18:002222")
+    pool = PooledTransport(
+        proto, [t0, t1], config=TransportConfig(), dedup_window=1.0
+    )
+    _connect_child(pool, 0, t0)
+    _connect_child(pool, 1, t1)
+
+    _record_rq(pool, times=2)
+
+    # Two distinct replies, each heard by both gateways: 4 copies.
+    for _ in range(2):
+        pool._on_child_packet(0, _make_rp())
+        pool._on_child_packet(1, _make_rp())
+
+    await asyncio.sleep(0.01)
+
+    assert proto.packet_received.call_count == 2
+    stats = pool.get_extra_info("pool_stats")
+    assert stats["forwarded"] == 2
+    assert stats["reply_bypassed"] == 1
+    assert stats["deduped"] == 2
+
+
+async def test_unsolicited_duplicate_reply_still_deduped() -> None:
+    """Without an outstanding request, identical replies dedup."""
+    proto = _make_mock_protocol()
+    t0 = _make_mock_transport(hgi="18:001111")
+    t1 = _make_mock_transport(hgi="18:002222")
+    pool = PooledTransport(
+        proto, [t0, t1], config=TransportConfig(), dedup_window=1.0
+    )
+    _connect_child(pool, 0, t0)
+    _connect_child(pool, 1, t1)
+
+    pool._on_child_packet(0, _make_rp())
+    pool._on_child_packet(1, _make_rp())
+
+    await asyncio.sleep(0.01)
+
+    assert proto.packet_received.call_count == 1
+    stats = pool.get_extra_info("pool_stats")
+    assert stats["deduped"] == 1
+    assert stats["reply_bypassed"] == 0
+
+
+async def test_second_tx_echo_survives_first_tx_expiry() -> None:
+    """A TX near the TTL boundary keeps its echo entitlement.
+
+    TX #1's echo is forwarded and its entitlement consumed; when TX
+    #1's record then ages past ``_RECENT_TX_TTL``, the prune must not
+    remove TX #2's entitlement.  Seen live: a ~3 s conversation retry
+    lost its echo and stalled the sender for 20 s.
+    """
+    from ramses_tx.transport.pooled import _RECENT_TX_TTL
+
+    proto = _make_mock_protocol()
+    t0 = _make_mock_transport(hgi="18:001111")
+    pool = PooledTransport(
+        proto, [t0], config=TransportConfig(), dedup_window=1.0
+    )
+    _connect_child(pool, 0, t0)
+
+    _record_rq(pool)
+    pool._on_child_packet(0, _make_echo())  # TX 1's echo -> forwarded
+
+    # Age TX 1's recent-TX record past the TTL, then send TX 2.
+    old_ts, old_key = pool._recent_tx_queue[0]
+    pool._recent_tx_queue[0] = (
+        old_ts - td(seconds=_RECENT_TX_TTL + 1),
+        old_key,
+    )
+    _record_rq(pool)
+
+    pool._on_child_packet(0, _make_echo())  # TX 2's echo -> must fwd
+
+    await asyncio.sleep(0.01)
+
+    assert proto.packet_received.call_count == 2
 
 
 # -- Outbound routing ------------------------------------------------------
