@@ -98,11 +98,14 @@ class Temperature(DeviceHeat):  # 30C9
         # this, the fake always sends index 00 and the UFC ignores it.
         # Only UFH zones need the parent's zone index — standard evohome
         # CTL zones (RAD/ELE/MIX/VAL) must send "00" (issue 929).
+        # Evohome UFH zones are also CTL-bound: their sensors must use
+        # "00" so RF binding selects the zone (ramses-rf/ramses_cc#929).
         zone_index = "00"
         if (
             self._parent is not None
             and hasattr(self._parent, "index")
             and getattr(self._parent, "_SLUG", None) == ZoneRole.UFH
+            and getattr(self.ctl, "_SLUG", None) != DevType.CTL
         ):
             zone_index = self._parent.index
         return await send_fake_intent(
