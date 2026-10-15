@@ -11,9 +11,12 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from ramses_rf.enums import DevType
+from ramses_rf.exceptions import BindingError, DeviceNotFaked
 from ramses_rf.models import HvacState
 from ramses_rf.typing import SchemaT
 from ramses_tx.const import Code, IndexT
+from ramses_tx.typing import DeviceIdT
 
 
 @runtime_checkable
@@ -380,22 +383,65 @@ class HvacStrategyBase:
     async def unbind_remote(self, fan: object, device_id: str) -> bool:
         """Release the FAN's binding slot for a REM/DIS over RF.
 
-        Contract stub for ramses_cc issue 1283: no verified unbind
-        protocol exists yet — the 1FC9 exchanges in the packet database
-        are bind handshakes only, and whether a similar sequence toggles
-        an unbind (or only a physical button gesture frees the slot) is
-        vendor/device-dependent.  Override in a vendor strategy only
-        with hardware-verified sequences; callers must treat a False
-        result as "no on-air unbind happened".
+        Contract stub for ramses_cc issue 1283: on-air unbind is
+        vendor/device-dependent and is only enabled on strategies whose
+        sequence has been verified against real hardware.  Callers must
+        treat a False result as "no on-air unbind happened".
 
         :param fan: The bound FAN device (``HvacVentilator``).
         :type fan: object
         :param device_id: The REM/DIS id to unbind on-air.
         :type device_id: str
-        :return: True only when the FAN confirmed the unbind.
+        :return: True only when the unbind handshake completed.
         :rtype: bool
         """
         return False
+
+    async def _send_unbind_handshake(
+        self, fan: object, device_id: str
+    ) -> bool:
+        """Run the 1FC9 unbind handshake impersonating the bound child.
+
+        A hardware capture of the device-side unbind gesture (a long
+        button press, ramses_cc issue 1283) shows unbinding is the
+        standard 3-way 1FC9 handshake — Offer → Accept → Confirm —
+        where the Confirm carries *no* codes: the ``00`` payload
+        confirms zero bindings and releases the FAN's slot.  The offer
+        is the child's usual binding codes (CO2 sensors use
+        :meth:`co2_binding_codes`).
+
+        Requires the child to be a Fakeable device — the gateway signs
+        the frames as the child, exactly like ``bind_device``.
+
+        :param fan: The bound FAN device (``HvacVentilator``).
+        :type fan: object
+        :param device_id: The REM/DIS/CO2 id to unbind on-air.
+        :type device_id: str
+        :return: True when the empty Confirm completed the handshake.
+        :rtype: bool
+        """
+        gateway = getattr(fan, "_gateway", None)
+        registry = getattr(gateway, "device_registry", None)
+        device_by_id = getattr(registry, "device_by_id", None)
+        child = (
+            device_by_id.get(DeviceIdT(device_id))
+            if isinstance(device_by_id, dict)
+            else None
+        )
+        fsm = getattr(child, "initiate_binding_process_with", None)
+        if child is None or not callable(fsm):
+            return False
+
+        offer = (
+            self.co2_binding_codes()
+            if getattr(child, "_SLUG", None) == DevType.CO2
+            else self.binding_codes()
+        )
+        try:
+            await fsm(offer, confirm_code=None)
+        except (BindingError, DeviceNotFaked):
+            return False
+        return True
 
     def ventilation_demand_payload(self, value: float) -> str:
         """Reject ventilation demand when the capability is unknown."""
