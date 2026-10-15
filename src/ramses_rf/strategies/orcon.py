@@ -236,6 +236,15 @@ class OrconStrategy(HvacStrategyBase):
         demand_raw = round(value * 100)
         return f"000000000100{demand_raw:02X}00"
 
+    async def unbind_remote(self, fan: object, device_id: str) -> bool:
+        """Release the FAN's binding slot for a REM/CO2 over RF.
+
+        Verified on Orcon hardware (MS-17C01 CO2 → FAN capture,
+        ramses_cc issue 1283): the unbind gesture emits the standard
+        1FC9 handshake ending in an empty Confirm (payload ``00``).
+        """
+        return await self._send_unbind_handshake(fan, device_id)
+
 
 class OrconHrc350Strategy(OrconStrategy):
     """Orcon capability profile for HRC-350 units (VMD-15RMS64, VMD-15RMS86)."""
