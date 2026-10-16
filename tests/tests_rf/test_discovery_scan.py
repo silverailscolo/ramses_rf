@@ -1459,7 +1459,7 @@ class TestDiscoveryScanPacketHandling:
                 addr3="01:208973",
                 code=Code._3150,
                 verb=Verb.I_,
-                payload="0100",
+                payload="01C8",
             )
         )
         own_trv = scan.get_device("04:086351")
