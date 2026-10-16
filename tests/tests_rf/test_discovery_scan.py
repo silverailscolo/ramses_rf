@@ -2809,6 +2809,79 @@ class TestEvidenceBasedContradiction:
         assert dev.likely_type == DevType.CO2  # no flapping
         scan.stop()
 
+    def test_declared_class_change_reseeds_scan_entry(self) -> None:
+        """A "declared"-confidence entry re-tracks a changed declaration.
+
+        32:150000 is declared FAN; its scan entry is seeded with
+        likely_type=FAN, confidence="declared" (the seed may also be
+        restored from persisted scan state after a reload).  The schema
+        is then changed to _class=DIS.  The stale FAN seed must be
+        re-seeded to DIS on the next source packet so FAN evidence can
+        accumulate contradictions — otherwise matching packets never
+        increment the count and the non-"high" confidence suppresses
+        the class-mismatch flag, hiding a real schema-vs-truth
+        mismatch (ramses_extras ha_sim recipe R24).
+        """
+        kl: dict[str, Any] = {"32:150000": {"class": "FAN"}}
+        gwy = make_mock_gateway(known_list=kl)
+        scan = DiscoveryScan(gwy)
+        # First packet creates the entry seeded with the declared class.
+        scan._process_packet(
+            make_dto(src="32:150000", code=Code._31D9, verb=Verb.I_)
+        )
+        dev = scan.get_device("32:150000")
+        assert dev is not None
+        assert dev.likely_type == DevType.FAN
+        assert dev.confidence == "declared"
+
+        # Declaration changes FAN -> DIS (e.g. schema reload).
+        kl["32:150000"]["class"] = "DIS"
+
+        # FAN evidence (I 31D9 is a VC pair match for FAN): the first
+        # packet re-seeds likely_type to DIS, the next 3 accumulate
+        # contradictions and re-classify back to FAN with high
+        # confidence.
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(src="32:150000", code=Code._31D9, verb=Verb.I_)
+            )
+        dev = scan.get_device("32:150000")
+        assert dev is not None
+        assert dev.likely_type == DevType.FAN  # re-classified by evidence
+        assert dev.confidence == "high"  # now flaggable as a mismatch
+        scan.stop()
+
+    def test_declared_class_change_respects_dis_compatible_evidence(
+        self,
+    ) -> None:
+        """DIS-compatible evidence does not re-classify a re-seeded DIS.
+
+        After re-seeding to the new DIS declaration, REM-subset traffic
+        (I 22F1) stays compatible and must not count as a contradiction.
+        """
+        kl: dict[str, Any] = {"37:150000": {"class": "REM"}}
+        gwy = make_mock_gateway(known_list=kl)
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(src="37:150000", code=Code._22F1, verb=Verb.I_)
+        )
+        dev = scan.get_device("37:150000")
+        assert dev is not None
+        assert dev.likely_type == DevType.REM
+        assert dev.confidence == "declared"
+
+        kl["37:150000"]["class"] = "DIS"
+
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(src="37:150000", code=Code._22F1, verb=Verb.I_)
+            )
+        dev = scan.get_device("37:150000")
+        assert dev is not None
+        assert dev.likely_type == DevType.DIS  # re-seeded, not re-classified
+        assert dev.contradiction_count == 0
+        scan.stop()
+
 
 class TestDisClassification:
     """Packet-level tests for DIS classification and echo filtering.

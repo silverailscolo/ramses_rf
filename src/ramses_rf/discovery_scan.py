@@ -1208,6 +1208,32 @@ class DiscoveryScan:
                     and code
                     and not self._is_declared_faked(device_id)
                 ):
+                    # A "declared" confidence means likely_type was seeded
+                    # from the declared class — including entries restored
+                    # from persisted scan state after a reload.  If the
+                    # declaration has since changed (schema edit), re-seed
+                    # likely_type to the current declared class so incoming
+                    # evidence contradicts the NEW declaration.  Without
+                    # this, a stale seed (e.g. FAN) survives a re-declaration
+                    # (to DIS): matching packets can never accumulate
+                    # contradictions, and the non-"high" confidence
+                    # suppresses the mismatch flag — a real schema-vs-truth
+                    # mismatch stays invisible forever.
+                    if device.confidence == "declared":
+                        declared_now = self._get_declared_class(device_id)
+                        if declared_now is not None and str(
+                            declared_now
+                        ) != str(device.likely_type):
+                            device.likely_type = declared_now
+                            device.contradiction_count = 0
+                            self._dirty = True
+                            _LOGGER.debug(
+                                "DiscoveryScan: re-seeded declared class for "
+                                "%s -> %s (declaration changed)",
+                                device_id,
+                                declared_now,
+                            )
+
                     new_type = _classify(
                         device_id,
                         code,
