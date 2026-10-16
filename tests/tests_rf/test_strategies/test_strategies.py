@@ -11,9 +11,13 @@ Tests cover:
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from ramses_rf.const import SZ_REL_HUMIDITY
+from ramses_rf.enums import DevType
+from ramses_rf.exceptions import DeviceNotFaked
 from ramses_rf.quirks import apply_hvac_quirks
 from ramses_rf.strategies import (
     _STRATEGY_BY_SCHEME,
@@ -811,3 +815,90 @@ class TestOrcon31D9ModeQuirk:
 
         assert result["fan_mode"] == "4 (boost)"
         assert result["exhaust_fan_speed"] == 0.005
+
+
+# ---------------------------------------------------------------------------
+# On-air unbind (ramses_cc issue 1283)
+# ---------------------------------------------------------------------------
+
+
+class TestUnbindRemote:
+    """unbind_remote — the empty-Confirm 1FC9 handshake (Orcon-verified)."""
+
+    @pytest.fixture()
+    def fan(self) -> MagicMock:
+        """A FAN whose gateway registry resolves the bound child."""
+        fan = MagicMock()
+        fan._gateway.device_registry = MagicMock()
+        return fan
+
+    async def test_base_strategy_reports_unsupported(
+        self, fan: MagicMock
+    ) -> None:
+        """The default strategy never attempts an on-air unbind."""
+        strategy = HvacStrategyBase()
+        assert await strategy.unbind_remote(fan, "37:117647") is False
+
+    async def test_orcon_runs_handshake_with_empty_confirm(
+        self, fan: MagicMock
+    ) -> None:
+        """Orcon sends the offer, then a Confirm with confirm_code=None."""
+        child = MagicMock()
+        child.initiate_binding_process_with = AsyncMock(
+            return_value=(MagicMock(), MagicMock(), MagicMock(), None)
+        )
+        fan._gateway.device_registry.device_by_id = {
+            "37:117647": child,
+            "29:181813": child,
+        }
+
+        strategy = OrconStrategy()
+        assert await strategy.unbind_remote(fan, "37:117647") is True
+        child.initiate_binding_process_with.assert_awaited_once()
+        assert (
+            child.initiate_binding_process_with.await_args.kwargs[
+                "confirm_code"
+            ]
+            is None
+        )
+
+    async def test_orcon_co2_uses_co2_offer(self, fan: MagicMock) -> None:
+        """A CO2 child gets co2_binding_codes() as the unbind offer."""
+        child = MagicMock()
+        child._SLUG = DevType.CO2
+        child.initiate_binding_process_with = AsyncMock(
+            return_value=(MagicMock(), MagicMock(), MagicMock(), None)
+        )
+        fan._gateway.device_registry.device_by_id = {
+            "37:117647": child,
+            "29:181813": child,
+        }
+
+        strategy = OrconStrategy()
+        await strategy.unbind_remote(fan, "29:181813")
+        offer = child.initiate_binding_process_with.await_args.args[0]
+        assert offer == strategy.co2_binding_codes()
+
+    async def test_orcon_child_not_found_returns_false(
+        self, fan: MagicMock
+    ) -> None:
+        """No child device in the registry → no frames sent."""
+        fan._gateway.device_registry.device_by_id = {}
+        strategy = OrconStrategy()
+        assert await strategy.unbind_remote(fan, "37:117647") is False
+
+    async def test_orcon_not_fakeable_returns_false(
+        self, fan: MagicMock
+    ) -> None:
+        """A non-Fakeable child can't sign the handshake → False."""
+        child = MagicMock()
+        child.initiate_binding_process_with = AsyncMock(
+            side_effect=DeviceNotFaked("not fakeable")
+        )
+        fan._gateway.device_registry.device_by_id = {
+            "37:117647": child,
+            "29:181813": child,
+        }
+
+        strategy = OrconStrategy()
+        assert await strategy.unbind_remote(fan, "37:117647") is False

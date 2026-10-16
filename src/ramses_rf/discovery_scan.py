@@ -25,6 +25,7 @@ from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any
 
 from ramses_rf.const import Code, DevType, Verb
+from ramses_rf.payloads.heating import ZoneDevicesPayload
 from ramses_rf.protocol.ramses import (
     HOUSEKEEPING_REPLY_CODES,
     HVAC_KLASS_BY_VC_PAIR,
@@ -32,6 +33,7 @@ from ramses_rf.protocol.ramses import (
     VMI_WRITE_CODES,
 )
 from ramses_rf.typing import SchemaT
+from ramses_tx.address import hex_id_to_dev_id
 from ramses_tx.const import SZ_ACTIVE_HGI
 
 if TYPE_CHECKING:
@@ -79,6 +81,24 @@ _PREFIX_TO_TYPE: dict[str, DevType] = {
 _VC_TO_TYPE: dict[tuple[str, str], DevType] = {
     (v.value, str(c)): dt for (v, c), dt in HVAC_KLASS_BY_VC_PAIR.items()
 }
+
+
+def dev_type_from_prefix(device_id: str) -> DevType | None:
+    """Return the prefix-derived DevType for a device ID, or None.
+
+    This is the scan engine's prefix fallback (``_PREFIX_TO_TYPE``):
+    exact for unambiguous prefixes (e.g. ``18:`` → ``DevType.HGI``,
+    ``01:`` → ``DevType.CTL``), a default for ambiguous HVAC prefixes
+    (``29:``/``37:`` — see ``_AMBIGUOUS_HVAC_PREFIX_TYPES``), and
+    ``None`` when the prefix is not a known RAMSES device prefix.
+
+    :param device_id: The device ID (e.g. ``"18:000730"``).
+    :type device_id: str
+    :return: The prefix-derived DevType, or None if unknown.
+    :rtype: DevType | None
+    """
+    return _PREFIX_TO_TYPE.get(device_id[:2])
+
 
 # Codes that only a CTL sends (from CODES_ONLY_FROM_CTL).
 # If a device sends one of these, it's definitely a CTL.
@@ -385,6 +405,41 @@ class DiscoveredDevice:
         """Deserialize from a plain dict (for JSON import/resume)."""
         return cls(
             **{k: data[k] for k in data if k in cls.__dataclass_fields__}
+        )
+
+    @classmethod
+    def stub(
+        cls,
+        device_id: str,
+        *,
+        likely_type: str | None = None,
+        confidence: str = "low",
+    ) -> DiscoveredDevice:
+        """Create a placeholder entry for a device with no scan data.
+
+        Used by consumers to represent faked or restored devices that
+        the scan engine has not observed this session.  When
+        ``likely_type`` is omitted, the prefix-derived type is used
+        (``dev_type_from_prefix``), falling back to ``"unknown"``.
+
+        :param device_id: The device ID to create the stub for.
+        :type device_id: str
+        :param likely_type: Optional explicit DevType value override.
+        :type likely_type: str | None
+        :param confidence: Confidence level, ``"low"`` by default.
+        :type confidence: str
+        :return: A minimal DiscoveredDevice stub.
+        :rtype: DiscoveredDevice
+        """
+        if likely_type is None:
+            dev_type = dev_type_from_prefix(device_id)
+            likely_type = str(dev_type) if dev_type else "unknown"
+        return cls(
+            device_id=device_id,
+            first_seen="",
+            last_seen="",
+            likely_type=likely_type,
+            confidence=confidence,
         )
 
 
@@ -721,6 +776,119 @@ class DiscoveryScan:
                 destination=None,
             )
 
+        # Payload-listed devices (000C binding table): a zone-sensor item
+        # (role 04) names the device bound as that zone's temperature
+        # sensor — authoritative topology evidence (ramses-rf/ramses_cc
+        # #1334, ramses-rf/ramses_cc#1344).  A broadcast-only sensor
+        # (THM/RND) sends no zone-indexed traffic of its own, so without
+        # this it can never acquire a zone_index and lands in
+        # orphans_heat, leaving the zone sensorless.
+        if code == Code._000C and source.startswith(("01:", "23:")):
+            self._apply_000c_sensor_bindings(
+                source, dto.payload or dto.raw_payload
+            )
+
+    def _apply_000c_sensor_bindings(  # type: ignore[explicit-any]
+        self, ctl_id: str, payload: Any
+    ) -> None:
+        """Attribute zone bindings declared by a CTL's 000C payload.
+
+        Each role-04 (zone_sensor) item names a device that the
+        controller's binding table declares as a zone's temperature
+        sensor.  The device itself may never send zone-indexed traffic,
+        so this is the only way it acquires a ``zone_index`` (and thereby
+        a ``sensor`` slot in a generated schema) rather than remaining
+        an orphan.
+
+        :param ctl_id: The controller that sent the 000C reply (01:/23:).
+        :type ctl_id: str
+        :param payload: Raw hex string or decoded ZoneDevicesPayload(s).
+        :type payload: Any
+        """
+        for item in _decode_000c_items(payload):
+            if getattr(item, "device_role_id", None) != 0x04:
+                continue
+            zone_index = getattr(item, "zone_index", None)
+            if zone_index is None or int(zone_index) > 0x0B:
+                continue
+            dev_hex = getattr(item, "device_id_str", "")
+            if dev_hex in ("7FFFFF", "FFFFFF", "000000"):
+                continue
+            device_id = hex_id_to_dev_id(dev_hex)
+            if not _is_valid_address(device_id):
+                continue
+            self._attribute_zone_sensor(
+                device_id, f"{int(zone_index):02X}", ctl_id
+            )
+
+    def _attribute_zone_sensor(
+        self, device_id: str, zone_index: str, ctl_id: str
+    ) -> None:
+        """Record a zone-sensor binding declared by a CTL's 000C item.
+
+        The binding is authoritative (the controller's binding table), so
+        it sets ``zone_index``/``bound_to`` and marks the entry high
+        confidence.  Works for both tracked and newly-seen devices —
+        including devices already in the known_list whose scan entry
+        needs enriching.
+
+        :param device_id: The sensor device named in the binding item.
+        :type device_id: str
+        :param zone_index: The zone index the sensor is bound to.
+        :type zone_index: str
+        :param ctl_id: The controller that declared the binding.
+        :type ctl_id: str
+        """
+        now = dt.now().isoformat(timespec="seconds")
+        device = self._devices.get(device_id)
+
+        if device is None:
+            declared_class = self._get_declared_class(device_id)
+            self._devices[device_id] = device = DiscoveredDevice(
+                device_id=device_id,
+                first_seen=now,
+                last_seen=now,
+                likely_type=declared_class
+                or _classify(device_id, Code._000C, Verb.RP, is_source=False),
+                zone_index=zone_index,
+                bound_to=ctl_id,
+                confidence="declared" if declared_class else "high",
+            )
+            self._dirty = True
+            _LOGGER.debug(
+                "DiscoveryScan: 000C zone sensor %s -> zone %s (bound to %s)",
+                device_id,
+                zone_index,
+                ctl_id,
+            )
+            if self._new_device_callback is not None:
+                try:
+                    self._new_device_callback(device)
+                except Exception:  # noqa: BLE001
+                    _LOGGER.exception(
+                        "DiscoveryScan: new-device callback failed for %s",
+                        device_id,
+                    )
+            return
+
+        changed = False
+        if device.zone_index != zone_index:
+            device.zone_index = zone_index
+            changed = True
+        if device.bound_to != ctl_id:
+            device.bound_to = ctl_id
+            changed = True
+        if changed:
+            device.confidence = "high"
+            self._dirty = True
+            _LOGGER.debug(
+                "DiscoveryScan: 000C updated zone binding for %s "
+                "(zone=%s, bound_to=%s)",
+                device_id,
+                zone_index,
+                ctl_id,
+            )
+
     def _process_device(
         self,
         device_id: str,
@@ -1040,6 +1208,32 @@ class DiscoveryScan:
                     and code
                     and not self._is_declared_faked(device_id)
                 ):
+                    # A "declared" confidence means likely_type was seeded
+                    # from the declared class — including entries restored
+                    # from persisted scan state after a reload.  If the
+                    # declaration has since changed (schema edit), re-seed
+                    # likely_type to the current declared class so incoming
+                    # evidence contradicts the NEW declaration.  Without
+                    # this, a stale seed (e.g. FAN) survives a re-declaration
+                    # (to DIS): matching packets can never accumulate
+                    # contradictions, and the non-"high" confidence
+                    # suppresses the mismatch flag — a real schema-vs-truth
+                    # mismatch stays invisible forever.
+                    if device.confidence == "declared":
+                        declared_now = self._get_declared_class(device_id)
+                        if declared_now is not None and str(
+                            declared_now
+                        ) != str(device.likely_type):
+                            device.likely_type = declared_now
+                            device.contradiction_count = 0
+                            self._dirty = True
+                            _LOGGER.debug(
+                                "DiscoveryScan: re-seeded declared class for "
+                                "%s -> %s (declaration changed)",
+                                device_id,
+                                declared_now,
+                            )
+
                     new_type = _classify(
                         device_id,
                         code,
@@ -1801,6 +1995,36 @@ def _is_appliance_control_signal(
     # directed replies (e.g. 3EF1 RP from the relay to the HGI)
     # and are not the TPI signature.
     return verb.strip() == "I"
+
+
+def _decode_000c_items(  # type: ignore[explicit-any]  # duck-typed payload
+    payload: Any | str,
+) -> list[Any]:
+    """Return the typed zone-device items of a 000C payload.
+
+    Accepts a raw hex string (the common case — raw packet handlers see
+    pre-decode payloads), a single ZoneDevicesPayload, or a list of them.
+    Raw strings are decoded via ``ZoneDevicesPayload.from_bytes`` so the
+    5-byte/6-byte item ambiguity is resolved exactly as the parser does.
+
+    :param payload: Raw hex string, ZoneDevicesPayload, or list thereof.
+    :type payload: Any | str
+    :returns: List of typed zone-device items (possibly empty).
+    :rtype: list[Any]
+    """
+    if isinstance(payload, list):
+        return [p for p in payload if hasattr(p, "device_role_id")]
+    if hasattr(payload, "device_role_id"):
+        return [payload]
+    if isinstance(payload, str) and payload:
+        try:
+            decoded = ZoneDevicesPayload.from_bytes(bytes.fromhex(payload))
+        except (ValueError, TypeError):
+            return []
+        if isinstance(decoded, list):
+            return [p for p in decoded if hasattr(p, "device_role_id")]
+        return [decoded] if hasattr(decoded, "device_role_id") else []
+    return []
 
 
 def _extract_domain_id_from_000c(  # type: ignore[explicit-any]  # duck-typed payload

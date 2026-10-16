@@ -675,8 +675,11 @@ def _update_hvac_state(
         # flagged (ramses_cc issue 1330)
         and getattr(target, "_supports_10d0", None) is False
         and (
-            p[SZ_REMAINING_DAYS] is not None
-            or p[SZ_REMAINING_PERCENT] is not None
+            (SZ_REMAINING_DAYS in p and p[SZ_REMAINING_DAYS] is not None)
+            or (
+                SZ_REMAINING_PERCENT in p
+                and p[SZ_REMAINING_PERCENT] is not None
+            )
         )
     ):
         cast(HvacVentilator, target)._supports_10d0 = True

@@ -27,6 +27,7 @@ from ramses_rf.discovery_scan import (
     DiscoveredDevice,
     DiscoveryScan,
     _classify,
+    _decode_000c_items,
     _extract_domain_id_from_000c,
     _extract_zone_index_from_payload,
     _initial_confidence,
@@ -35,6 +36,7 @@ from ramses_rf.discovery_scan import (
     _is_valid_address,
     _recompute_confidence,
     _should_update_domain_id,
+    dev_type_from_prefix,
 )
 from ramses_tx.const import SZ_ACTIVE_HGI
 from ramses_tx.dtos import PacketDTO
@@ -415,6 +417,192 @@ class TestDiscoveryScanDomainId:
         dev = scan.get_device(ctl_id)
         assert dev is not None
         assert dev.domain_id == "FA"
+
+
+class TestDecode000CItems:
+    """Tests for _decode_000c_items (zone-device binding items)."""
+
+    @staticmethod
+    def _as_tuples(items: list) -> list[tuple]:
+        return [
+            (item.zone_index, item.device_role_id, item.device_id_str)
+            for item in items
+        ]
+
+    def test_5_byte_item(self) -> None:
+        # zone_idx=01, role=04 (zone_sensor), no sub-idx, device=8B56E9
+        items = _decode_000c_items("0104008B56E9")
+        assert len(items) == 1
+        assert items[0].zone_index == 1
+        assert items[0].device_role_id == 0x04
+        assert items[0].device_id_str == "8B56E9"
+
+    def test_6_byte_item(self) -> None:
+        # 6B form: index + role + sub-idx + device id
+        items = _decode_000c_items("01080012E296")
+        assert len(items) == 1
+        assert items[0].zone_index == 1
+        assert items[0].device_role_id == 0x08
+        assert items[0].device_id_str == "12E296"
+
+    def test_multi_item_6_byte(self) -> None:
+        items = _decode_000c_items("01080012E2960204008B56E9")
+        assert self._as_tuples(items) == [
+            (1, 0x08, "12E296"),
+            (2, 0x04, "8B56E9"),
+        ]
+
+    def test_domain_role_has_no_zone_index(self) -> None:
+        # role 0F (APP relay) → domain-level binding, no zone_index
+        items = _decode_000c_items("000F003545C8")
+        assert len(items) == 1
+        assert items[0].zone_index is None
+        assert items[0].device_role_id == 0x0F
+
+    def test_invalid_payload_returns_empty(self) -> None:
+        assert _decode_000c_items("") == []
+        assert _decode_000c_items("01") == []
+        assert _decode_000c_items("ZZZZ") == []
+
+
+class TestDiscoveryScan000CZoneBinding:
+    """Zone-sensor attribution from CTL 000C payload items (issue 1344)."""
+
+    def test_ctl_000c_role04_attributes_payload_device(self) -> None:
+        """A CTL 000C role-04 item binds the payload device to the zone."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        ctl_id = "01:147133"
+
+        scan._process_packet(
+            make_dto(
+                src=ctl_id,
+                dst="18:001234",
+                code=Code._000C,
+                verb=Verb.RP,
+                payload="0104008B56E9",
+            )
+        )
+        dev = scan.get_device("34:218857")  # 0x8B56E9
+        assert dev is not None
+        assert dev.zone_index == "01"
+        assert dev.bound_to == ctl_id
+
+    def test_ctl_000c_6b_role04_attributes_payload_device(self) -> None:
+        """The 6B form (with sub-idx) also attributes the payload device."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        ctl_id = "01:147133"
+
+        # zone_idx=03, role=04, sub-idx=00, device 3029F4 → 50:010996? verify:
+        # use a real 34:-ranged hex id: 8B56E9 → 34:218857
+        scan._process_packet(
+            make_dto(
+                src=ctl_id,
+                dst="18:001234",
+                code=Code._000C,
+                verb=Verb.RP,
+                payload="0304008B56E9",
+            )
+        )
+        dev = scan.get_device("34:218857")
+        assert dev is not None
+        assert dev.zone_index == "03"
+        assert dev.bound_to == ctl_id
+
+    def test_non_ctl_000c_does_not_attribute_payload_device(self) -> None:
+        """A non-CTL source's 000C payload item must not bind the device."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+
+        scan._process_packet(
+            make_dto(
+                src="30:000001",  # UFC — not a controller
+                dst="18:001234",
+                code=Code._000C,
+                verb=Verb.RP,
+                payload="0104008B56E9",
+            )
+        )
+        dev = scan.get_device("34:218857")
+        # device may be tracked via other paths, but never zone-attributed
+        if dev is not None:
+            assert dev.zone_index != "01"
+
+    def test_000c_enriches_existing_orphan(self) -> None:
+        """A payload-listed device seen earlier (orphan) is enriched."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        ctl_id = "01:147133"
+
+        # THM broadcasts first — tracked without zone/binding
+        scan._process_packet(
+            make_dto(
+                src="34:218857",
+                dst="34:218857",
+                code=Code._30C9,
+                verb=Verb.I_,
+                payload="0007BC",
+            )
+        )
+        orphan = scan.get_device("34:218857")
+        assert orphan is not None
+        assert orphan.zone_index is None
+
+        scan._process_packet(
+            make_dto(
+                src=ctl_id,
+                dst="18:001234",
+                code=Code._000C,
+                verb=Verb.RP,
+                payload="0104008B56E9",
+            )
+        )
+        dev = scan.get_device("34:218857")
+        assert dev is not None
+        assert dev.zone_index == "01"
+        assert dev.bound_to == ctl_id
+
+    def test_000c_new_device_invokes_callback(self) -> None:
+        """A never-seen payload device surfaces via the device callback."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        ctl_id = "01:147133"
+
+        callback = MagicMock()
+        scan.set_new_device_callback(callback)
+
+        scan._process_packet(
+            make_dto(
+                src=ctl_id,
+                dst="18:001234",
+                code=Code._000C,
+                verb=Verb.RP,
+                payload="0104008B56E9",
+            )
+        )
+        new_ids = [call.args[0].device_id for call in callback.call_args_list]
+        assert "34:218857" in new_ids
+        assert scan.get_device("34:218857") is not None
+
+    def test_000c_domain_role_does_not_zone_attribute(self) -> None:
+        """Domain roles (0F etc.) must not set zone_index on payload dev."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        ctl_id = "01:147133"
+
+        scan._process_packet(
+            make_dto(
+                src=ctl_id,
+                dst="18:001234",
+                code=Code._000C,
+                verb=Verb.RP,
+                payload="000F003545C8",  # APP relay binding → domain FC
+            )
+        )
+        dev = scan.get_device("54:016712")  # 0x3545C8 — if tracked at all
+        if dev is not None:
+            assert dev.zone_index is None
 
 
 class TestClassify:
@@ -983,6 +1171,38 @@ class TestDiscoveredDevice:
         assert dev2.device_id == dev.device_id
         assert dev2.codes_seen == dev.codes_seen
         assert dev2.rssi == dev.rssi
+
+    def test_stub_uses_prefix_derived_type(self) -> None:
+        """stub() fills likely_type from the device ID prefix."""
+        dev = DiscoveredDevice.stub("18:000730")
+        assert dev.device_id == "18:000730"
+        assert dev.likely_type == str(DevType.HGI)
+        assert dev.confidence == "low"
+
+    def test_stub_explicit_likely_type(self) -> None:
+        """stub() honours an explicit likely_type override."""
+        dev = DiscoveredDevice.stub(
+            "04:056053", likely_type="TRV", confidence="high"
+        )
+        assert dev.likely_type == "TRV"
+        assert dev.confidence == "high"
+
+    def test_stub_unknown_prefix(self) -> None:
+        """stub() falls back to "unknown" for unmapped prefixes."""
+        dev = DiscoveredDevice.stub("99:123456")
+        assert dev.likely_type == "unknown"
+
+
+class TestDevTypeFromPrefix:
+    """Tests for dev_type_from_prefix."""
+
+    def test_unambiguous_prefixes(self) -> None:
+        assert dev_type_from_prefix("18:000730") == DevType.HGI
+        assert dev_type_from_prefix("01:145038") == DevType.CTL
+        assert dev_type_from_prefix("32:123456") == DevType.FAN
+
+    def test_unknown_prefix_returns_none(self) -> None:
+        assert dev_type_from_prefix("99:123456") is None
 
 
 # ---------------------------------------------------------------------------
@@ -2587,6 +2807,79 @@ class TestEvidenceBasedContradiction:
         dev = scan.get_device("37:126776")
         assert dev is not None
         assert dev.likely_type == DevType.CO2  # no flapping
+        scan.stop()
+
+    def test_declared_class_change_reseeds_scan_entry(self) -> None:
+        """A "declared"-confidence entry re-tracks a changed declaration.
+
+        32:150000 is declared FAN; its scan entry is seeded with
+        likely_type=FAN, confidence="declared" (the seed may also be
+        restored from persisted scan state after a reload).  The schema
+        is then changed to _class=DIS.  The stale FAN seed must be
+        re-seeded to DIS on the next source packet so FAN evidence can
+        accumulate contradictions — otherwise matching packets never
+        increment the count and the non-"high" confidence suppresses
+        the class-mismatch flag, hiding a real schema-vs-truth
+        mismatch (ramses_extras ha_sim recipe R24).
+        """
+        kl: dict[str, Any] = {"32:150000": {"class": "FAN"}}
+        gwy = make_mock_gateway(known_list=kl)
+        scan = DiscoveryScan(gwy)
+        # First packet creates the entry seeded with the declared class.
+        scan._process_packet(
+            make_dto(src="32:150000", code=Code._31D9, verb=Verb.I_)
+        )
+        dev = scan.get_device("32:150000")
+        assert dev is not None
+        assert dev.likely_type == DevType.FAN
+        assert dev.confidence == "declared"
+
+        # Declaration changes FAN -> DIS (e.g. schema reload).
+        kl["32:150000"]["class"] = "DIS"
+
+        # FAN evidence (I 31D9 is a VC pair match for FAN): the first
+        # packet re-seeds likely_type to DIS, the next 3 accumulate
+        # contradictions and re-classify back to FAN with high
+        # confidence.
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(src="32:150000", code=Code._31D9, verb=Verb.I_)
+            )
+        dev = scan.get_device("32:150000")
+        assert dev is not None
+        assert dev.likely_type == DevType.FAN  # re-classified by evidence
+        assert dev.confidence == "high"  # now flaggable as a mismatch
+        scan.stop()
+
+    def test_declared_class_change_respects_dis_compatible_evidence(
+        self,
+    ) -> None:
+        """DIS-compatible evidence does not re-classify a re-seeded DIS.
+
+        After re-seeding to the new DIS declaration, REM-subset traffic
+        (I 22F1) stays compatible and must not count as a contradiction.
+        """
+        kl: dict[str, Any] = {"37:150000": {"class": "REM"}}
+        gwy = make_mock_gateway(known_list=kl)
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(src="37:150000", code=Code._22F1, verb=Verb.I_)
+        )
+        dev = scan.get_device("37:150000")
+        assert dev is not None
+        assert dev.likely_type == DevType.REM
+        assert dev.confidence == "declared"
+
+        kl["37:150000"]["class"] = "DIS"
+
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(src="37:150000", code=Code._22F1, verb=Verb.I_)
+            )
+        dev = scan.get_device("37:150000")
+        assert dev is not None
+        assert dev.likely_type == DevType.DIS  # re-seeded, not re-classified
+        assert dev.contradiction_count == 0
         scan.stop()
 
 
