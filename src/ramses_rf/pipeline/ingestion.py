@@ -1161,12 +1161,21 @@ class StateProjector:
             if SZ_TEMPERATURE in payload:
                 # Legacy Parity: Physical sensors only track their own local sensor readings.
                 # We must ignore Zone temperature syncs sent TO them by the Controller.
+                # Symmetrically, a CTL/UFC ignores an actuator's report addressed
+                # to it — its temp_state is its own measured temperature, not the
+                # reporting device's (ramses-rf/ramses_cc#1328).
                 # Keep same as src/ramses_rf/dispatcher.py#_update_temperature_state
                 target_id = getattr(target, "id", str(target))
                 src_id = msg.src.id
 
                 if (
-                    getattr(target, "_SLUG", "") in (DevType.TRV, DevType.THM)
+                    getattr(target, "_SLUG", "")
+                    in (
+                        DevType.TRV,
+                        DevType.THM,
+                        DevType.CTL,
+                        DevType.UFC,
+                    )
                     and src_id != target_id
                 ):
                     pass

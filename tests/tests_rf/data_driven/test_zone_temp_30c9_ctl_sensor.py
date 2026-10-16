@@ -164,5 +164,19 @@ async def test_ctl_indexed_30c9_sync_does_not_fan_into_declaring_zone() -> (
             f"Zone 00 not hydrated by its own sync report: "
             f"{await zone_00.temperature()!r}"
         )
+
+        # The addressed TRV report must hydrate neither the zone it names
+        # (designated sensor) nor the controller's own temp_state — a
+        # CTL tracks only its own readings (ramses-rf/ramses_cc#1328).
+        ctl = tcs.ctl
+        assert ctl is not None
+        assert ctl.temp_state.temperature != 23.0, (
+            f"CTL temperature overwritten by an addressed TRV report: "
+            f"{ctl.temp_state.temperature!r}"
+        )
+        assert await zone_03.temperature() == 22.0, (
+            f"Zone 03 temperature overwritten by addressed TRV report: "
+            f"{await zone_03.temperature()!r}"
+        )
     finally:
         await gwy.stop()
