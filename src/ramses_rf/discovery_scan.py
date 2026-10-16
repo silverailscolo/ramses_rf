@@ -1910,8 +1910,12 @@ def _extract_zone_index_from_payload(  # type: ignore[explicit-any]  # duck-type
             if result is not None:
                 return result
         return None
-    if hasattr(payload, "zone_index"):
-        zone_index_val = payload.zone_index
+    # 3150-style payloads carry the index as domain_or_zone_index
+    # (HeatDemand1B/2B) rather than zone_index (ramses-rf/ramses_cc#1345).
+    zone_index_val = getattr(payload, "zone_index", None)
+    if zone_index_val is None:
+        zone_index_val = getattr(payload, "domain_or_zone_index", None)
+    if zone_index_val is not None:
         if isinstance(zone_index_val, int):
             if zone_index_val > 0x0B:
                 return None
