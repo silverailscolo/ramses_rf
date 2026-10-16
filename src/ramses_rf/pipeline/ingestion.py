@@ -189,7 +189,9 @@ from ramses_rf.protocol.opentherm import (
     OtDataId,
 )
 from ramses_rf.state_projector import (
+    _ctl_is_zone_sensor,
     _get_dhw_zone_from_msg,
+    _is_foreign_zone_sync,
     _route_2411_to_fan,
 )
 from ramses_rf.typing import PayloadT
@@ -439,7 +441,15 @@ class StateProjector:
                     # A declared-but-unbindable sensor (e.g. a CTL used as
                     # room thermostat) must also block the sole-actuator
                     # fallback (ramses-rf/ramses_cc#1328).
-                    if src_dev is parent_sensor or (
+                    # A parent-bound controller's indexed 30C9 is a sync
+                    # report for the indexed zone, not its own reading —
+                    # do not fan it into the zone bound to it as sensor.
+                    if (
+                        src_dev is parent_sensor
+                        and not _is_foreign_zone_sync(
+                            parent, src_dev, payload.get(SZ_ZONE_INDEX)
+                        )
+                    ) or (
                         parent_sensor is None
                         and getattr(parent, "_declared_sensor_id", None)
                         is None
@@ -1152,13 +1162,29 @@ class StateProjector:
             if SZ_TEMPERATURE in payload:
                 # Legacy Parity: Physical sensors only track their own local sensor readings.
                 # We must ignore Zone temperature syncs sent TO them by the Controller.
+                # Symmetrically, a CTL/UFC ignores an actuator's report addressed
+                # to it — its temp_state is its own measured temperature, not the
+                # reporting device's (ramses-rf/ramses_cc#1328).  Its own indexed
+                # zone syncs likewise carry child state: only the sync of the
+                # zone it senses is its own ambient (ramses-rf/ramses_rf#1315).
                 # Keep same as src/ramses_rf/dispatcher.py#_update_temperature_state
                 target_id = getattr(target, "id", str(target))
                 src_id = msg.src.id
 
+                slug = getattr(target, "_SLUG", "")
                 if (
-                    getattr(target, "_SLUG", "") in (DevType.TRV, DevType.THM)
+                    slug
+                    in (
+                        DevType.TRV,
+                        DevType.THM,
+                        DevType.CTL,
+                        DevType.UFC,
+                    )
                     and src_id != target_id
+                ) or (
+                    slug in (DevType.CTL, DevType.UFC)
+                    and payload.get(SZ_ZONE_INDEX) is not None
+                    and not _ctl_is_zone_sensor(target, payload[SZ_ZONE_INDEX])
                 ):
                     pass
                 else:

@@ -382,6 +382,12 @@ def _resolve_logical_targets(
     #    See: https://github.com/ramses-rf/ramses_cc/issues/927
     if msg.code == Code._30C9 and src_dev and "temperature" in p:
         parent = getattr(src_dev, "_parent", None)
+        # When the source is the parent zone's own TCS controller, a
+        # payload carrying a zone_index is a zone-synced report for THAT
+        # zone, not the sensor's own reading — it must not update another
+        # zone that treats the controller as its sensor
+        # (ramses-rf/ramses_cc#1328).
+        p_idx = p.get(SZ_ZONE_INDEX)
         if (
             parent is not None
             and hasattr(parent, "temp_state")
@@ -393,7 +399,10 @@ def _resolve_logical_targets(
             # A declared-but-unbindable sensor (e.g. a CTL used as room
             # thermostat) must also block the sole-actuator fallback
             # (ramses-rf/ramses_cc#1328).
-            if src_dev is parent_sensor or (
+            if (
+                src_dev is parent_sensor
+                and not _is_foreign_zone_sync(parent, src_dev, p_idx)
+            ) or (
                 parent_sensor is None
                 and getattr(parent, "_declared_sensor_id", None) is None
                 and len(parent_actuators) == 1
@@ -404,10 +413,12 @@ def _resolve_logical_targets(
         # A zone may declare a controller-class device (e.g. a CTL used as
         # a room thermostat) as its sensor, but Zone._update_schema refuses
         # the binding, so the _parent lookup above misses.  Fall back to
-        # the sensor id declared in the configured schema.
+        # the sensor id declared in the configured schema — skipping zones
+        # for which this packet is a sync report for a different zone.
         for zone in _zones_by_declared_sensor(gateway, registry, msg.src.id):
-            if zone not in targets:
-                targets.append(zone)
+            if zone in targets or _is_foreign_zone_sync(zone, src_dev, p_idx):
+                continue
+            targets.append(zone)
 
     return targets
 
@@ -432,6 +443,56 @@ def _has_designated_sensor(
     if src_dev is sensor or src_id == declared:
         return False
     return sensor is not None or declared is not None
+
+
+def _is_foreign_zone_sync(
+    zone: Entity, src_dev: Entity | None, p_idx: object
+) -> bool:
+    """Return True if an indexed 30C9 is a sync report for ANOTHER zone.
+
+    When a zone's own TCS controller is the packet source and the payload
+    already carries a ``zone_index``, the report is attributed to the
+    indexed zone — it is not the controller's "own reading" for a
+    different zone that treats the controller as its room sensor
+    (ramses-rf/ramses_cc#1328).  A sensor bound to a different (or no)
+    TCS emits a device-local idx that must not be compared to the zone's
+    index, so the check only applies to the zone's own controller.
+
+    :param zone: The zone a sensor-sourced 30C9 would be routed to.
+    :param src_dev: The source device of the inbound message, or None.
+    :param p_idx: The payload's ``zone_index``, or None when absent.
+    :return: True when the packet is a sync report for a different zone.
+    """
+    return (
+        src_dev is getattr(getattr(zone, "tcs", None), "ctl", None)
+        and p_idx is not None
+        and str(p_idx) != str(getattr(zone, "index", ""))
+    )
+
+
+def _ctl_is_zone_sensor(ctl: Entity | FaultLog, p_idx: object) -> bool:
+    """Return True if ``ctl`` is the sensor of the zone named by ``p_idx``.
+
+    A controller reports its own ambient temperature only as the sync of
+    the zone it senses; indexed syncs for other zones carry child state,
+    not the controller's own reading (ramses-rf/ramses_rf#1315).
+
+    :param ctl: The controller-class target of a temperature update.
+    :param p_idx: The payload's ``zone_index``.
+    :return: True when the indexed zone's sensor is the controller.
+    """
+    tcs = getattr(ctl, "tcs", None)
+    zone = (
+        getattr(tcs, "zone_by_index", {}).get(str(p_idx))
+        if tcs is not None
+        else None
+    )
+    if zone is None:
+        return False
+    declared = getattr(zone, "_declared_sensor_id", None)
+    return getattr(zone, "sensor", None) is ctl or (
+        declared is not None and str(declared) == str(ctl.id)
+    )
 
 
 def _zones_by_declared_sensor(
@@ -803,9 +864,19 @@ def _update_temperature_state(
 
         # Legacy Parity: Physical sensors only track their own local sensor readings.
         # We must ignore Zone temperature syncs sent TO them by the Controller.
+        # Symmetrically, a CTL/UFC ignores an actuator's report addressed
+        # to it — its temp_state is its own measured temperature, not the
+        # reporting device's (ramses-rf/ramses_cc#1328).  Its own indexed
+        # zone syncs likewise carry child state: only the sync of the zone
+        # it senses is its own ambient (ramses-rf/ramses_rf#1315).
+        slug = getattr(target, "_SLUG", "")
         if (
-            getattr(target, "_SLUG", "") in ("TRV", "THM")
+            slug in ("TRV", "THM", DevType.CTL, DevType.UFC)
             and src_id != target_id
+        ) or (
+            slug in (DevType.CTL, DevType.UFC)
+            and p.get(SZ_ZONE_INDEX) is not None
+            and not _ctl_is_zone_sensor(target, p[SZ_ZONE_INDEX])
         ):
             pass
         else:
