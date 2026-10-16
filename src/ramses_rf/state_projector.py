@@ -470,6 +470,31 @@ def _is_foreign_zone_sync(
     )
 
 
+def _ctl_is_zone_sensor(ctl: Entity | FaultLog, p_idx: object) -> bool:
+    """Return True if ``ctl`` is the sensor of the zone named by ``p_idx``.
+
+    A controller reports its own ambient temperature only as the sync of
+    the zone it senses; indexed syncs for other zones carry child state,
+    not the controller's own reading (ramses-rf/ramses_rf#1315).
+
+    :param ctl: The controller-class target of a temperature update.
+    :param p_idx: The payload's ``zone_index``.
+    :return: True when the indexed zone's sensor is the controller.
+    """
+    tcs = getattr(ctl, "tcs", None)
+    zone = (
+        getattr(tcs, "zone_by_index", {}).get(str(p_idx))
+        if tcs is not None
+        else None
+    )
+    if zone is None:
+        return False
+    declared = getattr(zone, "_declared_sensor_id", None)
+    return getattr(zone, "sensor", None) is ctl or (
+        declared is not None and str(declared) == str(ctl.id)
+    )
+
+
 def _zones_by_declared_sensor(
     gateway: Gateway, registry: DeviceRegistryInterface | None, src_id: str
 ) -> list[Entity]:
@@ -841,11 +866,17 @@ def _update_temperature_state(
         # We must ignore Zone temperature syncs sent TO them by the Controller.
         # Symmetrically, a CTL/UFC ignores an actuator's report addressed
         # to it — its temp_state is its own measured temperature, not the
-        # reporting device's (ramses-rf/ramses_cc#1328).
+        # reporting device's (ramses-rf/ramses_cc#1328).  Its own indexed
+        # zone syncs likewise carry child state: only the sync of the zone
+        # it senses is its own ambient (ramses-rf/ramses_rf#1315).
+        slug = getattr(target, "_SLUG", "")
         if (
-            getattr(target, "_SLUG", "")
-            in ("TRV", "THM", DevType.CTL, DevType.UFC)
+            slug in ("TRV", "THM", DevType.CTL, DevType.UFC)
             and src_id != target_id
+        ) or (
+            slug in (DevType.CTL, DevType.UFC)
+            and p.get(SZ_ZONE_INDEX) is not None
+            and not _ctl_is_zone_sensor(target, p[SZ_ZONE_INDEX])
         ):
             pass
         else:

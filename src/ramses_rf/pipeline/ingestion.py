@@ -189,6 +189,7 @@ from ramses_rf.protocol.opentherm import (
     OtDataId,
 )
 from ramses_rf.state_projector import (
+    _ctl_is_zone_sensor,
     _get_dhw_zone_from_msg,
     _is_foreign_zone_sync,
     _route_2411_to_fan,
@@ -1163,13 +1164,16 @@ class StateProjector:
                 # We must ignore Zone temperature syncs sent TO them by the Controller.
                 # Symmetrically, a CTL/UFC ignores an actuator's report addressed
                 # to it — its temp_state is its own measured temperature, not the
-                # reporting device's (ramses-rf/ramses_cc#1328).
+                # reporting device's (ramses-rf/ramses_cc#1328).  Its own indexed
+                # zone syncs likewise carry child state: only the sync of the
+                # zone it senses is its own ambient (ramses-rf/ramses_rf#1315).
                 # Keep same as src/ramses_rf/dispatcher.py#_update_temperature_state
                 target_id = getattr(target, "id", str(target))
                 src_id = msg.src.id
 
+                slug = getattr(target, "_SLUG", "")
                 if (
-                    getattr(target, "_SLUG", "")
+                    slug
                     in (
                         DevType.TRV,
                         DevType.THM,
@@ -1177,6 +1181,10 @@ class StateProjector:
                         DevType.UFC,
                     )
                     and src_id != target_id
+                ) or (
+                    slug in (DevType.CTL, DevType.UFC)
+                    and payload.get(SZ_ZONE_INDEX) is not None
+                    and not _ctl_is_zone_sensor(target, payload[SZ_ZONE_INDEX])
                 ):
                     pass
                 else:
