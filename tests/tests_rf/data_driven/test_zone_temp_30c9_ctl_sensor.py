@@ -26,6 +26,9 @@ SENSOR_TRV_DIR = Path(f"{TEST_DIR}/systems/_heat_ctl_sensor_30c9_trv")
 THM_SENSOR_TRV_IDX_DIR = Path(
     f"{TEST_DIR}/systems/_heat_thm_sensor_30c9_trv_idx"
 )
+TCS_CTL_CROSS_ZONE_DIR = Path(
+    f"{TEST_DIR}/systems/_heat_tcs_ctl_sensor_cross_zone_30c9"
+)
 
 
 @pytest.mark.asyncio
@@ -114,6 +117,52 @@ async def test_indexed_actuator_30c9_does_not_overwrite_thm_sensor_temp() -> (
         assert temp == 22.0, (
             f"Zone temperature overwritten by indexed actuator 30C9 "
             f"despite bound THM sensor: {temp!r}"
+        )
+    finally:
+        await gwy.stop()
+
+
+@pytest.mark.asyncio
+async def test_ctl_indexed_30c9_sync_does_not_fan_into_declaring_zone() -> (
+    None
+):
+    """An indexed 30C9 zone-sync report from the TCS controller must not
+    overwrite zones that merely declare the controller as their sensor.
+
+    Zone 03 declares ``01:150000`` — the TCS controller itself — as its
+    sensor.  The declared-sensor fallback routes any 30C9 whose source is
+    declared as a zone sensor to that zone — without checking whether the
+    payload already carries a zone_index for a *different* zone.  Each
+    element of the controller's zone-temperature sync then also lands in
+    zone 03, briefly overwriting its temperature with another zone's
+    value (ramses-rf/ramses_cc#1328).
+
+    See: https://github.com/ramses-rf/ramses_cc/issues/1328
+    """
+    gwy = await load_test_gwy(TCS_CTL_CROSS_ZONE_DIR)
+    try:
+        tcs = gwy.tcs
+        assert tcs is not None, "no TCS loaded"
+        zone_00 = tcs.zone_by_index.get("00")
+        zone_03 = tcs.zone_by_index.get("03")
+        zone_08 = tcs.zone_by_index.get("08")
+        assert zone_00 is not None and zone_03 is not None
+        assert zone_08 is not None
+        assert zone_03.sensor is tcs.ctl, (
+            "expected the TCS controller learned as zone sensor"
+        )
+
+        assert await zone_03.temperature() == 22.0, (
+            f"Zone 03 temperature overwritten by another zone's sync "
+            f"report: {await zone_03.temperature()!r}"
+        )
+        assert await zone_08.temperature() == 19.9, (
+            f"Zone 08 not hydrated by its own sync report: "
+            f"{await zone_08.temperature()!r}"
+        )
+        assert await zone_00.temperature() == 19.68, (
+            f"Zone 00 not hydrated by its own sync report: "
+            f"{await zone_00.temperature()!r}"
         )
     finally:
         await gwy.stop()

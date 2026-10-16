@@ -190,6 +190,7 @@ from ramses_rf.protocol.opentherm import (
 )
 from ramses_rf.state_projector import (
     _get_dhw_zone_from_msg,
+    _is_foreign_zone_sync,
     _route_2411_to_fan,
 )
 from ramses_rf.typing import PayloadT
@@ -439,7 +440,15 @@ class StateProjector:
                     # A declared-but-unbindable sensor (e.g. a CTL used as
                     # room thermostat) must also block the sole-actuator
                     # fallback (ramses-rf/ramses_cc#1328).
-                    if src_dev is parent_sensor or (
+                    # A parent-bound controller's indexed 30C9 is a sync
+                    # report for the indexed zone, not its own reading —
+                    # do not fan it into the zone bound to it as sensor.
+                    if (
+                        src_dev is parent_sensor
+                        and not _is_foreign_zone_sync(
+                            parent, src_dev, payload.get(SZ_ZONE_INDEX)
+                        )
+                    ) or (
                         parent_sensor is None
                         and getattr(parent, "_declared_sensor_id", None)
                         is None
