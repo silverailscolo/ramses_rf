@@ -95,9 +95,8 @@ HEAT_ZONES_STRS = tuple(ZON_ROLE_MAP[t] for t in ZON_ROLE_MAP.HEAT_ZONES)
 
 SCH_DOM_ID = vol.Match(r"^[0-9A-F]{2}$")
 SCH_UFH_INDEX = vol.Match(r"^0[0-8]$")
-SCH_ZON_INDEX = vol.Match(
-    r"^0[0-9AB]$"
-)  # TODO: what if > 12 zones? (e.g. hometronics)
+# Hometronics supports up to 16 zones (00-0F); Evohome defaults to 12 (00-0B)
+SCH_ZON_INDEX = vol.Match(r"^0[0-9A-F]$")
 
 
 def error_renamed_key(new_key: str) -> Callable[[object], None]:
@@ -193,7 +192,7 @@ SCH_TCS_ZONES_ZON = vol.Schema(
 )
 SCH_TCS_ZONES = vol.All(
     vol.Schema({vol.Required(SCH_ZON_INDEX): SCH_TCS_ZONES_ZON}),
-    vol.Length(min=1, max=12),
+    vol.Length(min=1, max=16),
     extra=vol.PREVENT_EXTRA,
 )
 
@@ -268,7 +267,8 @@ SCH_GLOBAL_SCHEMAS = vol.Schema(
 # 4/7: Gateway (parser/state) configuration
 SZ_ENABLE_EAVESDROP: Final = "enable_eavesdrop"
 SZ_ENFORCE_STRICT_HANDLING: Final = "enforce_strict_handling"
-SZ_MAX_ZONES: Final = "max_zones"  # TODO: move to TCS-attr from GWY-layer
+# NOTE: Gateway-level default (copied to MultiZone._max_zones on TCS init)
+SZ_MAX_ZONES: Final = "max_zones"
 SZ_REDUCE_PROCESSING: Final = "reduce_processing"
 SZ_USE_ALIASES: Final = (
     "use_aliases"  # use friendly device names from known_list
@@ -427,11 +427,11 @@ def load_schema(  # type: ignore[explicit-any]  # schema-tree kwargs
         for fan_id, schema in schema.items()
         if re.match(DEVICE_ID_REGEX.ANY, fan_id) and SZ_REMOTES in schema
     ]
-    [  # NOTE: class favoured, domain ignored
+    [  # NOTE: class favoured, domain ignored (split keys preserved for schema round-trip)
         _get_device(gateway, device_id)  # domain=key[-4:])
         for key in (SZ_ORPHANS_HEAT, SZ_ORPHANS_HVAC)
         for device_id in schema.get(key, [])
-    ]  # TODO: pass domain (Heat/HVAC), or generalise to SZ_ORPHANS
+    ]
 
     # create any devices in the known list that are faked, or fake those already created
     for device_id, traits in known_list.items():
