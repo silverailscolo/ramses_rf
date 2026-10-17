@@ -155,7 +155,8 @@ _CH_TCS_UFH_CIRCUIT = vol.Schema(
     {
         vol.Required(SCH_UFH_INDEX): vol.Schema(
             {
-                vol.Optional(SZ_ZONE_INDEX): SCH_ZON_INDEX,
+                vol.Optional(SZ_ZONE_INDEX): vol.Any(None, SCH_ZON_INDEX),
+                vol.Optional("zone_idx"): vol.Any(None, SCH_ZON_INDEX),
             },
         ),
     },
@@ -496,12 +497,21 @@ def _load_ufh_system(
             if not isinstance(circuit_schema, dict):
                 continue
 
-            zone_index = circuit_schema.get(SZ_ZONE_INDEX)
+            zone_index = circuit_schema.get(
+                SZ_ZONE_INDEX
+            ) or circuit_schema.get("zone_idx")
             if zone_index is None:
                 continue
 
             circuit = ufc.get_circuit(str(ufh_index))
             zone_index_str = str(zone_index)
+            if hasattr(ufc, "circuit_by_id") and isinstance(
+                ufc.circuit_by_id, dict
+            ):
+                ufc.circuit_by_id[str(ufh_index)] = {
+                    SZ_ZONE_INDEX: zone_index_str
+                }
+
             if zone := zones_map.get(zone_index_str):
                 circuit.set_zone(zone)
 
