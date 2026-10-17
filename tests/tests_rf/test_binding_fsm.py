@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-# TODO: test addenda phase of binding handshake
 # TODO: get test working with (and without) disabled QoS
 
 """RAMSES RF - Test the binding protocol with a virtual RF.
@@ -297,7 +296,6 @@ def _assert_l7_parity(
         assert msg._dto.payload == cmd.payload
 
 
-# TODO: test addenda phase of binding handshake
 async def _test_flow_10x(
     gwy_r: Gateway,
     gwy_s: Gateway,
@@ -352,10 +350,7 @@ async def _test_flow_10x(
         await resp_task
         await assert_context_state(respondent, _BindStates.NEEDING_AFFIRM)
 
-        if (
-            not isinstance(gwy_r._engine._protocol, PortProtocol)
-            or getattr(gwy_r._engine._protocol, "_context", None) is None
-        ):
+        if not isinstance(gwy_r._engine._protocol, PortProtocol):
             pytest.skip("QoS protocol not enabled")
 
         tender = resp_task.result()
@@ -391,28 +386,37 @@ async def _test_flow_10x(
         await assert_context_state(supplicant, _BindStates.HAS_BOUND_SUPP)
         assert packet is not None
 
-        if len(packet_flow_expected) > _RATIFY:  # FIXME
-            supp_bm.set_state(_BindStates.TO_SEND_RATIFY)  # HACK: easiest way
-
         await resp_task
         await assert_context_state(respondent, _BindStates.HAS_BOUND_RESP)
-
-        if len(packet_flow_expected) > _RATIFY:  # FIXME
-            resp_bm.set_state(_BindStates.NEEDING_RATIFY)  # HACK: easiest way
 
         affirm = resp_task.result()
         _assert_l7_parity(affirm, packet)
 
-        #
-        # Some bindings don't include an Addenda...
-        if len(packet_flow_expected) <= _RATIFY:  # i.e. no addenda  FIXME
+        if len(packet_flow_expected) <= _RATIFY:
             return
+
+        supp_bm.set_state(_BindStates.TO_SEND_RATIFY)  # HACK: easiest way
+        resp_bm.set_state(_BindStates.NEEDING_RATIFY)  # HACK: easiest way
 
         await assert_context_state(respondent, _BindStates.NEEDING_RATIFY)
         await assert_context_state(supplicant, _BindStates.TO_SEND_RATIFY)
 
+        # Step R3 / S3: Respondent waits for Addenda while Supplicant casts it
+        raw = packet_flow_expected[_RATIFY]
+        clean_raw = raw[:46] + raw[46:].replace("-", "")
+        ratify_cmd = CommandDTO.from_cli(clean_raw)
 
-# TODO: test addenda phase of binding handshake
+        resp_task = tg.create_task(resp_bm._wait_for_addenda(accept))
+        addenda_pkt = await supp_bm._cast_addenda(accept, ratify_cmd)
+        assert addenda_pkt is not None
+
+        await resp_task
+        await assert_context_state(supplicant, _BindStates.HAS_BOUND_SUPP)
+        await assert_context_state(respondent, _BindStates.HAS_BOUND_RESP)
+        ratify = resp_task.result()
+        _assert_l7_parity(ratify, addenda_pkt)
+
+
 async def _test_flow_20x(
     gwy_r: Gateway,
     gwy_s: Gateway,
