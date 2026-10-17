@@ -1101,6 +1101,45 @@ def test_0008_relay_demand_populates_tcs_dict() -> None:
     )
 
 
+def test_0009_relay_failsafe_populates_tcs_dict() -> None:
+    """0009 relay failsafe populates TCS._relay_failsafes per domain."""
+    from ramses_rf.models import DemandState
+
+    ctl_dev = FakeDevice()
+    ctl_dev.id = "01:216136"
+    ctl_dev._SLUG = DevType.CTL
+    ctl_dev.demand_state = DemandState()
+
+    class FakeTcsWithFailsafes:
+        id = "01:216136"
+        appliance_control = None
+        zone_by_index: dict[str, Any] = {}
+        _heat_demands: dict[str, Any] = {}
+        _relay_demands: dict[str, Any] = {}
+        _relay_failsafes: dict[str, Any] = {}
+        _tpi_params: dict[str, Any] = {}
+
+    mock_tcs = FakeTcsWithFailsafes()
+    ctl_dev.tcs = mock_tcs
+    registry = FakeRegistry(ctl_dev)
+    registry.systems = [mock_tcs]
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    msg = MockMessage(
+        code=Code._0009,
+        verb=Verb.I_,
+        payload={SZ_DOMAIN_INDEX: "FC", "failsafe_enabled": True},
+        src_id="01:216136",
+        dst_id="--:------",
+    )
+    worker.process_message_state(msg)
+
+    assert "FC" in mock_tcs._relay_failsafes
+    assert mock_tcs._relay_failsafes["FC"]["failsafe_enabled"] is True
+
+
 def test_1100_tpi_params_populates_tcs_dict() -> None:
     """1100 TPI params populate TCS._tpi_params dict (issue 1102 / ramses_cc#1026).
 
