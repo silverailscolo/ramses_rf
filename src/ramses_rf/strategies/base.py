@@ -410,6 +410,13 @@ class HvacStrategyBase:
         is the child's usual binding codes (CO2 sensors use
         :meth:`co2_binding_codes`).
 
+        Note the gesture is *device-initiated*: real battery REM/DIS
+        units may instead just drop the binding on their own side and
+        emit no 1FC9 traffic at all, in which case the FAN keeps the
+        registration until its bound list is wiped.  A silent RF side
+        is valid hardware behaviour — callers should not treat a
+        missing handshake as a failed unbind.
+
         Requires the child to be a Fakeable device — the gateway signs
         the frames as the child, exactly like ``bind_device``.
 
