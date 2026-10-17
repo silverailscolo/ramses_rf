@@ -2175,7 +2175,6 @@ class ZoneDevicesPayload(PayloadBase):
     """Master payload dispatcher and base class for Opcode 000C.
 
     Protocol & Heuristic Notes:
-      # TODO: 000C to a UFC should be ufh_index, not zone_index
       # NOTE: Both len=5 and len=6 elements are valid! So collision when len = 036!
       # Note: 000C sent to a UFC device represents ufh_index rather than zone_index
       # If sent to/from a UFC device, byte 0 is ufh_index and sub_index is zone_index
@@ -3529,7 +3528,6 @@ class ActuatorStatePayload(PayloadBase):
       # ch_setpoint, and max_rel_modulation.
       # NOTE: some [2:4] appear to intend 0x00-0x64 (high_res=False), instead of 0x00-0xC8
       # NOTE: for best compatibility, all will be switched to 0x00-0xC8 (high_res=True)
-      # TODO: These two should be picked up by the regex
       # .I --- 13:042805 --:------ 13:042805 3EF0 003 0000FF
       # .I --- 13:023770 --:------ 13:023770 3EF0 003 00C8FF
       # RP --- 10:004598 34:003611 --:------ 3EF0 006 0000100000FF
