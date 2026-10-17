@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """RAMSES RF - Test the various helper APIs."""
 
-# TODO: add test for ramses_tx.frame.packet_header()
-
 from typing import Any
 
 from ramses_rf.const import DEV_ROLE_MAP, DEV_TYPE_MAP
