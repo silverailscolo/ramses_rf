@@ -38,6 +38,7 @@ from ramses_rf.discovery_scan import (
     _should_update_domain_id,
     dev_type_from_prefix,
 )
+from ramses_rf.payloads.heating import HeatDemand2BPayload
 from ramses_tx.const import SZ_ACTIVE_HGI
 from ramses_tx.dtos import PacketDTO
 
@@ -171,6 +172,18 @@ class TestExtractZoneIdx:
     def test_zone_lowercase(self) -> None:
         # Should normalise to uppercase
         assert _extract_zone_index_from_payload("0a00") == "0A"
+
+    def test_decoded_3150_domain_or_zone_index(self) -> None:
+        # HeatDemand2B (3150) carries the index as domain_or_zone_index,
+        # not zone_index — a decoded payload object must still yield the
+        # zone index (ramses-rf/ramses_cc#1345)
+        payload = HeatDemand2BPayload.from_bytes(bytes.fromhex("02C8"))
+        assert _extract_zone_index_from_payload(payload) == "02"
+
+    def test_decoded_3150_domain_rejected(self) -> None:
+        # A domain index (FC appliance_control) is not a zone index
+        payload = HeatDemand2BPayload.from_bytes(bytes.fromhex("FCC8"))
+        assert _extract_zone_index_from_payload(payload) is None
 
 
 class TestIsApplianceControlSignal:
