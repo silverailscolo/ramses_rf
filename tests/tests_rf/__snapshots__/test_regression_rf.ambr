@@ -472,13 +472,6 @@
         'id': '02:000921',
         'is_alive': None,
         'tcs_id': '01:191718',
-        'thermal_demands': list([
-          dict({
-            'mode': 'heat',
-            'thermal_demand': 0.98,
-            'ufh_index': '06',
-          }),
-        ]),
         'type': 'UfhController',
         'zone_index': None,
       }),
@@ -582,11 +575,6 @@
           dict({
             'mode': 'heat',
             'thermal_demand': 0.0,
-            'ufh_index': '0B',
-          }),
-          dict({
-            'mode': 'heat',
-            'thermal_demand': 0.0,
             'ufh_index': '02',
           }),
         ]),
@@ -636,6 +624,26 @@
             'mode': 'heat',
             'thermal_demand': 0.59,
             'ufh_index': '00',
+          }),
+          dict({
+            'mode': 'heat',
+            'thermal_demand': 0.59,
+            'ufh_index': '01',
+          }),
+          dict({
+            'mode': 'heat',
+            'thermal_demand': 0.59,
+            'ufh_index': '02',
+          }),
+          dict({
+            'mode': 'heat',
+            'thermal_demand': 0.59,
+            'ufh_index': '03',
+          }),
+          dict({
+            'mode': 'heat',
+            'thermal_demand': 0.59,
+            'ufh_index': '04',
           }),
         ]),
         'type': 'UfhController',
@@ -734,21 +742,6 @@
             'thermal_demand': 0.0,
             'ufh_index': '02',
           }),
-          dict({
-            'mode': 'heat',
-            'thermal_demand': 0.74,
-            'ufh_index': '08',
-          }),
-          dict({
-            'mode': 'heat',
-            'thermal_demand': 0.0,
-            'ufh_index': '07',
-          }),
-          dict({
-            'mode': 'heat',
-            'thermal_demand': 0.0,
-            'ufh_index': '03',
-          }),
         ]),
         'type': 'UfhController',
         'zone_index': None,
@@ -826,12 +819,12 @@
         'thermal_demands': list([
           dict({
             'mode': 'heat',
-            'thermal_demand': 0.82,
+            'thermal_demand': 0.23,
             'ufh_index': '00',
           }),
           dict({
             'mode': 'heat',
-            'thermal_demand': 0.0,
+            'thermal_demand': 0.39,
             'ufh_index': '01',
           }),
           dict({
@@ -846,18 +839,8 @@
           }),
           dict({
             'mode': 'heat',
-            'thermal_demand': 0.23,
-            'ufh_index': '04',
-          }),
-          dict({
-            'mode': 'heat',
-            'thermal_demand': 0.39,
-            'ufh_index': '05',
-          }),
-          dict({
-            'mode': 'heat',
             'thermal_demand': 1.0,
-            'ufh_index': '06',
+            'ufh_index': '04',
           }),
         ]),
         'type': 'UfhController',

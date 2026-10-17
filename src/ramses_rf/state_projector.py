@@ -260,6 +260,12 @@ def _resolve_logical_targets(
     )
 
     tcs = getattr(src_dev, "tcs", None) if src_dev else None
+    if tcs is None and dst_dev:
+        tcs = getattr(dst_dev, "tcs", None) or (
+            dst_dev
+            if getattr(dst_dev, "_SLUG", None) in ("CTL", DevType.CTL)
+            else None
+        )
     tcs = tcs or getattr(gateway, "tcs", None)
     if tcs is None and registry:
         for candidate_dev in registry.device_by_id.values():
