@@ -1,6 +1,6 @@
 """An incomplete native frame must never contaminate a subsequent RF frame."""
 
-from datetime import timedelta
+from datetime import timedelta as td
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,13 +12,14 @@ from .test_transport_zigbee import (
     _make_transport,
     _transport_with_device,
 )
+from .test_zigbee_aps import NativeTXCluster
 
 
-def test_expired_native_assembly_discards_late_tail():
+def test_expired_native_assembly_discards_late_tail() -> None:
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     transport._frame_read = MagicMock()
     transport.cluster_command(1, 2, (100, 1, 2, "old"))
-    future = dt_now() + timedelta(seconds=36)
+    future = dt_now() + td(seconds=36)
     with patch(
         "ramses_tx.transport.zigbee.transport.dt_now", return_value=future
     ):
@@ -39,14 +40,16 @@ def test_expired_native_assembly_discards_late_tail():
         (1, 1, 1, "é"),
     ],
 )
-def test_malformed_native_chunk_is_not_delivered(malformed):
+def test_malformed_native_chunk_is_not_delivered(
+    malformed: tuple[int, int, int, str],
+) -> None:
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     transport._frame_read = MagicMock()
     transport.cluster_command(1, 2, malformed)
     transport._frame_read.assert_not_called()
 
 
-def test_changed_total_aborts_current_native_message():
+def test_changed_total_aborts_current_native_message() -> None:
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     transport._frame_read = MagicMock()
     for args in (
@@ -58,9 +61,7 @@ def test_changed_total_aborts_current_native_message():
     transport._frame_read.assert_not_called()
 
 
-def test_schema_object_from_quirk_is_accepted():
-    from .test_zigbee_aps import NativeTXCluster
-
+def test_schema_object_from_quirk_is_accepted() -> None:
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     transport._frame_read = MagicMock()
     schema = NativeTXCluster.ClientCommandDefs.send_chunk.schema
@@ -71,7 +72,7 @@ def test_schema_object_from_quirk_is_accepted():
 
 
 @pytest.mark.asyncio
-async def test_reconnect_selects_native_mode_before_becoming_ready():
+async def test_reconnect_selects_native_mode_before_becoming_ready() -> None:
     transport = _transport_with_device(last_seen_age=0)
     transport._aps_ack = True
     transport._device_online = False

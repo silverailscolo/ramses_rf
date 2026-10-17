@@ -32,7 +32,7 @@ class NativeTXCluster(Cluster):
         )
 
 
-def test_existing_urls_keep_legacy_acknowledgements():
+def test_existing_urls_keep_legacy_acknowledgements() -> None:
     transport = _make_transport()
     assert not transport._aps_ack
     with pytest.raises(exc.TransportSourceInvalid):
@@ -40,7 +40,7 @@ def test_existing_urls_keep_legacy_acknowledgements():
 
 
 @pytest.mark.parametrize("callback", ["cluster_command", "attribute_updated"])
-def test_aps_reassembly_never_schedules_ascii_ack(callback):
+def test_aps_reassembly_never_schedules_ascii_ack(callback: str) -> None:
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     transport._frame_read = MagicMock()
     for payload in ("1/2|first", "2/2|second"):
@@ -54,7 +54,9 @@ def test_aps_reassembly_never_schedules_ascii_ack(callback):
 
 
 @pytest.mark.asyncio
-async def test_real_zigpy_serialization_requests_aps_ack_without_zcl_reply():
+async def test_real_zigpy_serialization_requests_aps_ack_without_zcl_reply() -> (
+    None
+):
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     endpoint = MagicMock()
     endpoint.reply = AsyncMock()
@@ -76,7 +78,9 @@ async def test_real_zigpy_serialization_requests_aps_ack_without_zcl_reply():
 
 
 @pytest.mark.asyncio
-async def test_failed_delivery_aborts_remaining_chunks_without_api_fallback():
+async def test_failed_delivery_aborts_remaining_chunks_without_api_fallback() -> (
+    None
+):
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     cluster = MagicMock()
     cluster.client_commands = {2: object()}
@@ -92,13 +96,15 @@ async def test_failed_delivery_aborts_remaining_chunks_without_api_fallback():
 
 
 @pytest.mark.asyncio
-async def test_next_chunk_waits_for_delivery_and_frames_do_not_interleave():
+async def test_next_chunk_waits_for_delivery_and_frames_do_not_interleave() -> (
+    None
+):
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     first_started = asyncio.Event()
     confirm = asyncio.Event()
-    sent = []
+    sent: list[str] = []
 
-    async def send(chunk, sequence, total):
+    async def send(chunk: str, sequence: int, total: int) -> None:
         sent.append(chunk)
         if len(sent) == 1:
             first_started.set()
@@ -118,11 +124,11 @@ async def test_next_chunk_waits_for_delivery_and_frames_do_not_interleave():
 
 
 @pytest.mark.asyncio
-async def test_aps_payloads_stay_within_conservative_wire_budget():
+async def test_aps_payloads_stay_within_conservative_wire_budget() -> None:
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
-    sent = []
+    sent: list[str] = []
 
-    async def send(chunk, sequence, total):
+    async def send(chunk: str, sequence: int, total: int) -> None:
         sent.append(chunk)
 
     transport._send_command = send
@@ -136,7 +142,9 @@ async def test_aps_payloads_stay_within_conservative_wire_budget():
     assert all(len(chunk.encode("ascii")) + 10 <= 40 for chunk in sent)
 
 
-def test_new_message_replaces_incomplete_message_with_same_chunk_count():
+def test_new_message_replaces_incomplete_message_with_same_chunk_count() -> (
+    None
+):
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     transport._frame_read = MagicMock()
     for payload in ("1/3|old", "2/3|obsolete", "1/3|new", "3/3|end"):
@@ -146,7 +154,9 @@ def test_new_message_replaces_incomplete_message_with_same_chunk_count():
     assert transport._frame_read.call_args.args[1] == "newmiddleend"
 
 
-def test_malformed_chunk_and_legacy_ack_never_schedule_control_traffic():
+def test_malformed_chunk_and_legacy_ack_never_schedule_control_traffic() -> (
+    None
+):
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     transport._frame_read = MagicMock()
     transport.cluster_command(1, 0, "ACK 1/3")
@@ -155,7 +165,7 @@ def test_malformed_chunk_and_legacy_ack_never_schedule_control_traffic():
     transport._loop.create_task.assert_not_called()
 
 
-def test_native_late_chunks_cannot_join_a_different_message():
+def test_native_late_chunks_cannot_join_a_different_message() -> None:
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     transport._frame_read = MagicMock()
     for args in ((10, 1, 2, "old"), (11, 1, 2, "new"), (10, 2, 2, "late")):
@@ -166,7 +176,7 @@ def test_native_late_chunks_cannot_join_a_different_message():
     transport._loop.create_task.assert_not_called()
 
 
-def test_native_gap_drops_message_and_next_message_recovers():
+def test_native_gap_drops_message_and_next_message_recovers() -> None:
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     transport._frame_read = MagicMock()
     for args in ((10, 1, 3, "first"), (10, 3, 3, "gap"), (10, 2, 3, "late")):
@@ -176,7 +186,7 @@ def test_native_gap_drops_message_and_next_message_recovers():
     assert transport._frame_read.call_args.args[1] == "complete"
 
 
-def test_native_duplicate_chunks_do_not_deliver_twice():
+def test_native_duplicate_chunks_do_not_deliver_twice() -> None:
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     transport._frame_read = MagicMock()
     for args in ((10, 1, 2, "one"), (10, 1, 2, "one"), (10, 2, 2, "two")) * 2:
@@ -186,13 +196,13 @@ def test_native_duplicate_chunks_do_not_deliver_twice():
 
 
 @pytest.mark.asyncio
-async def test_native_timeout_releases_write_lock_for_next_frame():
+async def test_native_timeout_releases_write_lock_for_next_frame() -> None:
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     transport._APS_TIMEOUT = 0.01
     cluster = MagicMock()
     cluster.client_commands = {2: object()}
 
-    async def never_confirms(*args, **kwargs):
+    async def never_confirms(*args: object, **kwargs: object) -> None:
         await asyncio.Event().wait()
 
     cluster.client_command = AsyncMock(side_effect=never_confirms)
@@ -206,7 +216,7 @@ async def test_native_timeout_releases_write_lock_for_next_frame():
 
 
 @pytest.mark.asyncio
-async def test_native_mode_selection_is_a_single_aps_command():
+async def test_native_mode_selection_is_a_single_aps_command() -> None:
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     cluster = MagicMock()
     cluster.client_commands = {3: object()}
