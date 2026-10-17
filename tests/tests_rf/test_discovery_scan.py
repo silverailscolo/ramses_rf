@@ -1427,6 +1427,59 @@ class TestDiscoveryScanPacketHandling:
         assert dev.bound_to == "01:145038"
         assert dev.confidence == "high"
 
+    def test_zone_binding_extracted_from_addr3_on_i_frame(self) -> None:
+        """Directed I frames place the peer CTL in addr3 with addr2=--:------.
+
+        Regression for ramses-rf/ramses_cc#1353: real TRV I packets
+        (e.g. ``I --- 04:034039 --:------ 01:256581 12B0 003 060000``)
+        carry the controller in addr3; bound_to must be populated for
+        both new and known devices so neighbour TRVs stay attributed to
+        their own controller.
+        """
+        gwy = make_mock_gateway(known_list={"04:086351": {"class": "TRV"}})
+        scan = DiscoveryScan(gwy)
+        # Unknown neighbour TRV addressing neighbour CTL in addr3
+        scan._process_packet(
+            make_dto(
+                src="04:034039",
+                dst="--:------",
+                addr3="01:256581",
+                code=Code._12B0,
+                verb=Verb.I_,
+                payload="060000",
+            )
+        )
+        foreign_trv = scan.get_device("04:034039")
+        assert foreign_trv is not None
+        assert foreign_trv.zone_index == "06"
+        assert foreign_trv.bound_to == "01:256581"
+
+        # Known TRV enriched on second packet with CTL in addr3
+        scan._process_packet(
+            make_dto(
+                src="04:086351",
+                dst="--:------",
+                addr3="04:086351",
+                code=Code._30C9,
+                verb=Verb.I_,
+                payload="0007D9",
+            )
+        )
+        scan._process_packet(
+            make_dto(
+                src="04:086351",
+                dst="--:------",
+                addr3="01:208973",
+                code=Code._3150,
+                verb=Verb.I_,
+                payload="01C8",
+            )
+        )
+        own_trv = scan.get_device("04:086351")
+        assert own_trv is not None
+        assert own_trv.zone_index == "01"
+        assert own_trv.bound_to == "01:208973"
+
     def test_thm_zone_binding_via_000a(self) -> None:
         """THM (22:) sends RQ 000A with its zone_index as payload (issue 813).
 

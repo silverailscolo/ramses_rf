@@ -660,6 +660,16 @@ class DiscoveryScan:
         source = dto.addr1.strip()
         destination = dto.addr2.strip()
         addr3 = dto.addr3.strip() if dto.addr3 else ""
+        # Directed I frames carry the peer in addr3 with addr2 ==
+        # "--:------" (e.g. I --- 04:034039 --:------ 01:256581 12B0,
+        # ramses-rf/ramses_cc#1353).
+        if (
+            not _is_valid_address(destination)
+            and _is_valid_address(source)
+            and _is_valid_address(addr3)
+            and addr3 != source
+        ):
+            destination = addr3
         code = str(dto.code).strip()
         verb = dto.verb if dto.verb else ""
 
