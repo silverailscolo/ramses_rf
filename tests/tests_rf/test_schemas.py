@@ -28,16 +28,18 @@ def test_sch_dom_id_validation() -> None:
 
 
 def test_sch_zon_index_validation() -> None:
-    """Verify SCH_ZON_INDEX validates zone index format."""
-    # Valid zone indices
+    """Verify SCH_ZON_INDEX validates zone index format (00-0F)."""
+    # Valid zone indices (00-0B Evohome, 0C-0F Hometronics up to 16 zones)
     assert SCH_ZON_INDEX("00") == "00"
     assert SCH_ZON_INDEX("09") == "09"
     assert SCH_ZON_INDEX("0A") == "0A"
     assert SCH_ZON_INDEX("0B") == "0B"
+    assert SCH_ZON_INDEX("0C") == "0C"
+    assert SCH_ZON_INDEX("0F") == "0F"
 
     # Invalid zone indices
     with pytest.raises(vol.Invalid):
-        SCH_ZON_INDEX("0C")
+        SCH_ZON_INDEX("0G")
     with pytest.raises(vol.Invalid):
         SCH_ZON_INDEX("10")
 

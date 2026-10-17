@@ -1313,6 +1313,14 @@ class StateProjector:
                 heat_dict = getattr(tcs, "_heat_demands", None)
                 if heat_dict is not None:
                     heat_dict[domain] = msg
+            if (
+                domain
+                and msg.code == Code._0009
+                and SZ_FAILSAFE_ENABLED in payload
+            ):
+                failsafe_dict = getattr(tcs, "_relay_failsafes", None)
+                if failsafe_dict is not None:
+                    failsafe_dict[domain] = payload
 
     def _update_ufh_state(
         self, target: Entity, payload: PayloadT, msg: Message

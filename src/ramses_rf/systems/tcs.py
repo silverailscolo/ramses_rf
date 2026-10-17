@@ -69,9 +69,6 @@ if TYPE_CHECKING:
     from .faultlog import FaultIdxT, FaultLogEntry
 
 
-# TODO: refactor packet routing (filter *before* routing)
-
-
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     F9,
     FA,
@@ -298,7 +295,7 @@ class SystemBase(Parent[Device], Entity):  # 3B00 (multi-relay)
             if k in ("orphans",) and v  # add UFH?
         }
 
-        return result  # TODO: check against vol schema
+        return shrink(SCH_TCS(result))
 
     async def params(self) -> SchemaT:
         """Return the system's configuration.
@@ -969,7 +966,7 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         :returns: Dictionary mapping domain ID to ThermalDemandDTO or None.
         :rtype: dict[str, ThermalDemandDTO] | None
         """
-        # FC: 00-C8 (no F9, FA), TODO: deprecate as FC only?
+        # NOTE: FC: 00-C8 (no F9, FA); kept as domain dict for ramses_cc compat
         if not self._heat_demands:
             return None
         mode = (
@@ -1002,7 +999,12 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         """Return the current relay failsafes per domain."""
         if not self._relay_failsafes:
             return None
-        return {}  # FIXME: failsafe_enabled
+        return {
+            k: v.get("failsafe_enabled")
+            if isinstance(v, dict)
+            else v.payload.get("failsafe_enabled")
+            for k, v in self._relay_failsafes.items()
+        }
 
     async def status(self) -> SchemaT:
         """Return the system's current state.
@@ -1011,7 +1013,6 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         :rtype: SchemaT
         """
         status = await super().status()
-        # assert SZ_SYSTEM in status  # TODO: removeme
 
         status[SZ_SYSTEM]["heat_demands"] = self.thermal_demands
         status[SZ_SYSTEM]["relay_demands"] = self.relay_demands

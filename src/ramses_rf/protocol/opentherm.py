@@ -161,7 +161,7 @@ STATUS_DATA_IDS: Final[dict[_OtDataIdT, _MsgStrT]] = {
     OtDataId._18: "Room temperature (°C)",  # .                                           #  24
     OtDataId._19: "Boiler flow water temperature (°C)",  # .                              #  25
     OtDataId._1A: "DHW temperature (°C)",  # .                                            #  26
-    OtDataId._1B: "Outside temperature (°C)",  # TODO: any value here?  # is R/W          #  27
+    OtDataId._1B: "Outside temperature (°C)",  # .                    # is R/W            #  27
     OtDataId._1C: "Return water temperature (°C)",  # .                                   #  28
     #
     # These are error/state codes...
@@ -285,10 +285,10 @@ OPENTHERM_DATA_IDS: Final[dict[_OtDataIdT, _MsgStrT]] = (
     | STATUS_DATA_IDS
     | WRITE_DATA_IDS
     | {
-        OtDataId._0A: "Number of TSPs supported by slave",  # TODO                        #  10
-        OtDataId._0C: "Size of FHB supported by slave",  # .  TODO                        #  12
-        OtDataId._0D: "FHB Entry",  # .                       TODO                        #  13
-        OtDataId._7D: "Opentherm version Slave",  # .         TODO                        # 125
+        OtDataId._0A: "Number of TSPs supported by slave",  # .                           #  10
+        OtDataId._0C: "Size of FHB supported by slave",  # .                              #  12
+        OtDataId._0D: "FHB Entry",  # .                                                   #  13
+        OtDataId._7D: "Opentherm version Slave",  # .                                     # 125
     }
 )
 

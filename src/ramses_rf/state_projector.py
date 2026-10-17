@@ -1053,6 +1053,14 @@ def _update_demand_state(
             heat_dict = getattr(tcs, "_heat_demands", None)
             if heat_dict is not None:
                 heat_dict[domain] = msg
+        if (
+            domain
+            and getattr(msg, "code", None) == Code._0009
+            and "failsafe_enabled" in p
+        ):
+            failsafe_dict = getattr(tcs, "_relay_failsafes", None)
+            if failsafe_dict is not None:
+                failsafe_dict[domain] = p
 
 
 def _update_faultlog_state(
