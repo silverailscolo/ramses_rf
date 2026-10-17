@@ -679,10 +679,18 @@ class DiscoveryScan:
             with contextlib.suppress(ValueError, TypeError):
                 rssi = float(dto.rssi)
 
-        # Extract zone_index from payload if this is a binding code
+        # Extract zone_index from payload if this is a binding code.
+        # A 2309 setpoint only carries a zone index when directed to a
+        # peer — a self-addressed 2309 from a standalone THM/RND (like
+        # the excluded 30C9) holds its own internal stat index ("00"),
+        # not a CTL zone (ramses-rf/ramses_cc#1182).
         zone_index = (
             _extract_zone_index_from_payload(dto.payload or dto.raw_payload)
             if code in _ZONE_BINDING_CODES
+            and (
+                code != Code._2309
+                or (_is_valid_address(destination) and destination != source)
+            )
             else None
         )
 

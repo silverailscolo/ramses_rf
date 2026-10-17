@@ -1522,6 +1522,48 @@ class TestDiscoveryScanPacketHandling:
         assert dev.zone_index is None
         assert dev.bound_to is None
 
+    def test_self_addressed_2309_sets_no_zone_index(self) -> None:
+        """A self-addressed 2309 is not zone evidence (ramses_cc#1182).
+
+        Standalone UFH thermostats (22:) broadcast their setpoint to
+        themselves (addr3 == src) with an internal stat index of "00" —
+        not a CTL zone index.  Stamping "00" made ramses_cc move the THM
+        into zone 00's actuators on every reload.
+        """
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(
+                src="22:072769",
+                dst="--:------",
+                addr3="22:072769",
+                code=Code._2309,
+                payload="0001F4",
+            )
+        )
+        dev = scan.get_device("22:072769")
+        assert dev is not None
+        assert dev.zone_index is None
+        assert dev.bound_to is None
+
+    def test_directed_2309_sets_zone_index(self) -> None:
+        """A 2309 directed at a CTL still carries the bound zone index."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(
+                src="04:088729",
+                dst="--:------",
+                addr3="01:068717",
+                code=Code._2309,
+                payload="0001F4",
+            )
+        )
+        dev = scan.get_device("04:088729")
+        assert dev is not None
+        assert dev.zone_index == "00"
+        assert dev.bound_to == "01:068717"
+
     def test_bdr_3b00_sets_domain_id_fc(self) -> None:
         """BDR broadcasting 3B00 as I sets domain_id=FC (issue 834).
 
