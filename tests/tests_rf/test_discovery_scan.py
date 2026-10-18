@@ -1720,6 +1720,89 @@ class TestDiscoveryScanPacketHandling:
         # 18:73030 is broadcast — should not be in discovery list
         assert scan.get_device("18:73030") is None
 
+    def test_dst_unknown_prefix_not_registered(self) -> None:
+        """A dst-only address with an unknown prefix is not registered.
+
+        Regression: an unbound one-way remote keeps transmitting to its
+        stale binding target (``I --- 29:176861 62:008256 --:------
+        22F1``).  The ghost dst was registered as a DEV/low device and
+        surfaced as a spurious new discovery.
+        """
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(
+                src="29:176861",
+                dst="62:008256",
+                code=Code._22F1,
+                payload="000104",
+            )
+        )
+        # src has a known prefix so it is still registered
+        assert scan.get_device("29:176861") is not None
+        assert scan.get_device("62:008256") is None
+
+    def test_addr3_unknown_prefix_not_registered(self) -> None:
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(
+                src="01:145038",
+                dst="18:006402",
+                addr3="62:008256",
+                code=Code._000C,
+            )
+        )
+        assert scan.get_device("62:008256") is None
+
+    def test_src_unknown_prefix_registered(self) -> None:
+        """A real transmitter is registered even with an unknown prefix."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(src="62:008256", dst="--:------", code=Code._22F1)
+        )
+        dev = scan.get_device("62:008256")
+        assert dev is not None
+        assert dev.source_count == 1
+
+    def test_dst_unknown_prefix_tracked_device_still_enriched(self) -> None:
+        """A tracked unknown-prefix device still counts dst packets."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        # register 62:008256 as a real transmitter first
+        scan._process_packet(
+            make_dto(src="62:008256", dst="--:------", code=Code._22F1)
+        )
+        scan._process_packet(
+            make_dto(
+                src="29:176861",
+                dst="62:008256",
+                code=Code._22F1,
+                payload="000104",
+            )
+        )
+        dev = scan.get_device("62:008256")
+        assert dev is not None
+        assert dev.destination_count == 1
+
+    def test_zone_bound_to_unknown_prefix_dst_not_set(self) -> None:
+        """bound_to is not pointed at an unregistrable dst address."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(
+                src="04:056053",
+                dst="62:008256",
+                code=Code._3150,
+                payload="02C8",
+            )
+        )
+        dev = scan.get_device("04:056053")
+        assert dev is not None
+        assert dev.zone_index == "02"
+        assert dev.bound_to is None
+
     def test_hvac_fan_discovered(self) -> None:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
@@ -1963,6 +2046,97 @@ class TestDiscoveryScanExportImport:
         data = json.loads(scan.export_json())
         ids = [d["device_id"] for d in data["devices"]]
         assert ids == sorted(ids)
+
+    def test_import_drops_dst_only_unknown_prefix(self) -> None:
+        """Persisted dst-only ghosts are dropped on import."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan.import_json(
+            json.dumps(
+                {
+                    "version": 1,
+                    "devices": [
+                        {
+                            "device_id": "62:008256",
+                            "first_seen": "2026-10-16T09:57:27",
+                            "last_seen": "2026-10-16T10:13:13",
+                            "likely_type": "DEV",
+                            "codes_seen": [Code._22F1],
+                            "source_count": 0,
+                            "destination_count": 30,
+                        }
+                    ],
+                }
+            )
+        )
+        assert scan.get_device("62:008256") is None
+
+    def test_import_keeps_unknown_prefix_transmitter(self) -> None:
+        """An unknown-prefix device that transmitted is retained."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan.import_json(
+            json.dumps(
+                {
+                    "version": 1,
+                    "devices": [
+                        {
+                            "device_id": "62:008256",
+                            "first_seen": "2026-10-16T09:57:27",
+                            "last_seen": "2026-10-16T10:13:13",
+                            "likely_type": "DEV",
+                            "codes_seen": [Code._22F1],
+                            "source_count": 3,
+                        }
+                    ],
+                }
+            )
+        )
+        assert scan.get_device("62:008256") is not None
+
+    def test_import_keeps_declared_unknown_prefix(self) -> None:
+        """A user-declared device is retained even with an unknown prefix."""
+        gwy = make_mock_gateway(known_list={"62:008256": {"class": "DEV"}})
+        scan = DiscoveryScan(gwy)
+        scan.import_json(
+            json.dumps(
+                {
+                    "version": 1,
+                    "devices": [
+                        {
+                            "device_id": "62:008256",
+                            "first_seen": "2026-10-16T09:57:27",
+                            "last_seen": "2026-10-16T10:13:13",
+                            "likely_type": "DEV",
+                            "source_count": 0,
+                        }
+                    ],
+                }
+            )
+        )
+        assert scan.get_device("62:008256") is not None
+
+    def test_import_drops_invalid_address(self) -> None:
+        """Sentinel/malformed addresses are dropped on import."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan.import_json(
+            json.dumps(
+                {
+                    "version": 1,
+                    "devices": [
+                        {
+                            "device_id": "63:262142",
+                            "first_seen": "2026-10-16T09:57:27",
+                            "last_seen": "2026-10-16T10:13:13",
+                            "likely_type": "DEV",
+                            "destination_count": 5,
+                        }
+                    ],
+                }
+            )
+        )
+        assert scan.get_device("63:262142") is None
 
 
 # ---------------------------------------------------------------------------

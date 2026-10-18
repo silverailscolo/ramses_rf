@@ -1087,7 +1087,7 @@ class DiscoveryScan:
                     device.zone_index = zone_index
                     if (
                         destination
-                        and _is_valid_address(destination)
+                        and _is_discoverable_address(destination)
                         and destination != device_id
                     ):
                         if device.bound_to != destination:
@@ -1343,6 +1343,14 @@ class DiscoveryScan:
         device = self._devices.get(device_id)
 
         if device is None:
+            # Don't create an entry from dst/addr3 evidence alone when
+            # the prefix maps to no known DevType (e.g. 62: — the stale
+            # binding target of an unbound one-way remote): it could
+            # only ever become an unclassifiable DEV/low ghost.  Real
+            # devices register via a source packet eventually; an
+            # already-tracked device still gets enriched below.
+            if not is_source and not _is_discoverable_address(device_id):
+                return
             # New device — classify and create entry
             likely_type = _classify(device_id, code, verb, is_source=is_source)
             device = DiscoveredDevice(
@@ -1372,7 +1380,7 @@ class DiscoveryScan:
                 device.zone_index = zone_index
                 if (
                     destination
-                    and _is_valid_address(destination)
+                    and _is_discoverable_address(destination)
                     and destination != device_id
                 ):
                     device.bound_to = destination
@@ -1504,7 +1512,7 @@ class DiscoveryScan:
             device.zone_index = zone_index
             if (
                 destination
-                and _is_valid_address(destination)
+                and _is_discoverable_address(destination)
                 and destination != device_id
             ):
                 if device.bound_to != destination:
@@ -1696,10 +1704,27 @@ class DiscoveryScan:
         device is declared as REM in the schema.
         """
         parsed = json.loads(data)
-        self._devices = {
+        devices = {
             d["device_id"]: DiscoveredDevice.from_dict(d)
             for d in parsed.get("devices", [])
         }
+        # Drop imported entries the scan could never create today:
+        # malformed/sentinel addresses, and dst-only ghosts whose prefix
+        # maps to no known device class (e.g. 62:008256 — a stale
+        # one-way binding target that was never seen transmitting).
+        # Declared devices and real transmitters are retained.
+        self._devices = {
+            device_id: device
+            for device_id, device in devices.items()
+            if _is_discoverable_address(device_id)
+            or self._is_known(device_id)
+            or device.source_count > 0
+        }
+        if dropped := set(devices) - set(self._devices):
+            _LOGGER.debug(
+                "DiscoveryScan: dropped undiscoverable imported devices: %s",
+                sorted(dropped),
+            )
         # Override likely_type for known devices with declared class
         had_overrides = False
         for device_id, device in self._devices.items():
@@ -1752,6 +1777,28 @@ def _is_valid_address(device_id: str) -> bool:
         return False
     # Basic format check: should contain a colon
     return ":" in device_id
+
+
+def _is_discoverable_address(device_id: str) -> bool:
+    """Check if an address can produce a useful discovery entry.
+
+    Extends :func:`_is_valid_address` by requiring the prefix to map to
+    a known DevType (``_PREFIX_TO_TYPE``).  An address with an unknown
+    prefix can only ever be classified as a low-confidence DEV — for
+    dst/addr3-only sightings (e.g. ``62:008256``, the stale binding
+    target of an unbound one-way remote) that produces ghost devices,
+    so those are not registered.  Source addresses are not restricted:
+    a real transmitter should be discovered even when its prefix is
+    unknown.
+
+    :param device_id: The device ID to check.
+    :type device_id: str
+    :return: True if the address may be registered as a device.
+    :rtype: bool
+    """
+    return _is_valid_address(device_id) and (
+        dev_type_from_prefix(device_id) is not None
+    )
 
 
 def _classify(
