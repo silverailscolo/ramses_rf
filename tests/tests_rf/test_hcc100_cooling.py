@@ -51,7 +51,7 @@ def _decode(
         addr3=f"{source_type}:000001",
         code=code if isinstance(code, str) else code.value,
         length=f"{len(payload) // 2:03d}",
-        payload=payload,
+        raw_payload=payload,
     )
 
     # Act

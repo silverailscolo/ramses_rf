@@ -701,8 +701,10 @@ class DiscoveryScan:
         # See issue 834 comment 5044906835.
         domain_id: str | None = None
         is_authoritative_domain = False
-        if code == Code._000C and dto.payload:
-            domain_id = _extract_domain_id_from_000c(dto.payload)
+        if code == Code._000C and (dto.payload or dto.raw_payload):
+            domain_id = _extract_domain_id_from_000c(
+                dto.payload or dto.raw_payload
+            )
             if domain_id:
                 is_authoritative_domain = True
         if not domain_id:
@@ -2085,6 +2087,11 @@ def _extract_domain_id_from_000c(  # type: ignore[explicit-any]  # duck-typed pa
     if hasattr(payload, "domain_id"):
         result_domain = payload.domain_id
         return str(result_domain) if result_domain is not None else None
+    for item in _decode_000c_items(payload):
+        if hasattr(item, "domain_id"):
+            result_domain = item.domain_id
+            if result_domain is not None:
+                return str(result_domain)
     if not payload or not isinstance(payload, str) or len(payload) < 4:
         return None
     role = payload[2:4].upper()

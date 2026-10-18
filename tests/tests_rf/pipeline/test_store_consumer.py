@@ -32,7 +32,7 @@ def _mock_message(
         addr3="--:------",
         code=code,
         length="003",
-        payload="0001C8",  # A realistic hex string to pass validation checks
+        raw_payload="0001C8",  # A realistic hex string to pass validation checks
     )
     mock_header = StateHeader.create(
         code=code, verb=Verb.I_, source_id=src_id, context_value=None

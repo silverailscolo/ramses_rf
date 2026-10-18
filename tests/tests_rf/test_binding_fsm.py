@@ -289,11 +289,11 @@ def _assert_l7_parity(
     elif isinstance(cmd, CommandDTO):
         assert cmd.addr1 in (msg.src.id, msg.dst.id, "--:------")
         assert cmd.addr2 in (msg.src.id, msg.dst.id, "--:------")
-        assert msg._dto.payload == cmd.payload
+        assert msg._dto.raw_payload == cmd.payload
     else:
         assert msg.src.id == cmd.src.id
         assert msg.dst.id == cmd.dst.id
-        assert msg._dto.payload == cmd.payload
+        assert msg._dto.raw_payload == cmd.raw_payload
 
 
 async def _test_flow_10x(

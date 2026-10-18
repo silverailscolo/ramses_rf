@@ -40,7 +40,6 @@ def make_dto(
         addr3=addr3,
         code=code,
         length=f"{len(payload) // 2:03d}",
-        payload=payload,
         raw_payload=payload,
     )
 

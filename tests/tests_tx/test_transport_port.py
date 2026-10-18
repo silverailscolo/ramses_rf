@@ -294,7 +294,7 @@ async def test_packet_read_resolves_init_fut_on_signature_echo() -> None:
 
     mock_packet = MagicMock()
     mock_packet.code = Code._PUZZ
-    mock_packet.payload = "00"
+    mock_packet.raw_payload = "00"
     mock_packet.src.id = "18:000000"
 
     with patch("ramses_tx.transport.base._FullTransport._packet_read"):

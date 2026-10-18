@@ -866,7 +866,7 @@ class PortTransport(_FullTransport):
         if (
             not self._init_fut.done()
             and packet.code == Code._PUZZ
-            and packet.payload == self._extra.get(SZ_SIGNATURE)
+            and packet.raw_payload == self._extra.get(SZ_SIGNATURE)
         ):
             self._extra[SZ_ACTIVE_HGI] = packet.src.id
             self._init_fut.set_result(packet)

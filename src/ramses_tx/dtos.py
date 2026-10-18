@@ -37,7 +37,7 @@ class PacketDTO:
     :param raw_payload: Raw ASCII hex payload string (e.g., "0001C8").
     :type raw_payload: str
     :param payload: Strongly-typed payload dataclass object.
-    :type payload: Any | None
+    :type payload: PayloadBase | list[PayloadBase] | None
     :param is_tx: True if outbound transmission, False if inbound.
     :type is_tx: bool
     :param is_echo: True if this frame is an echo of our own
@@ -56,23 +56,11 @@ class PacketDTO:
     addr3: str
     code: str
     length: str
-    payload: "PayloadBase | list[PayloadBase] | str | None" = None
+    payload: "PayloadBase | list[PayloadBase] | None" = None
     raw_payload: str = ""
     is_tx: bool = False
     is_echo: bool = False
     comment: str = ""
-
-    def __post_init__(self) -> None:
-        """Auto-populate raw_payload and payload string fallback if needed.
-
-        TODO: Temporary fallback for PR 10 transition. To be removed in PR
-        12 of #1001 once all callers pass PayloadBase and raw_payload.
-        """
-        if isinstance(self.payload, str) and not self.raw_payload:
-            object.__setattr__(self, "raw_payload", self.payload)
-
-        if self.payload is None and self.raw_payload:
-            object.__setattr__(self, "payload", self.raw_payload)
 
 
 @dataclass(frozen=True, slots=True)

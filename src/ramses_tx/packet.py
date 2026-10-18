@@ -18,7 +18,7 @@ from .address import ALL_DEV_ADDR, NON_DEV_ADDR, Address, packet_addrs
 from .const import I_, RAW_LINE_REGEX, RP, W_, Code, Verb
 from .dtos import CommandDTO, PacketDTO
 from .logger import getLogger
-from .typing import HeaderT, PayloadT
+from .typing import HeaderT
 
 if TYPE_CHECKING:
     from ramses_rf.payloads.base import PayloadBase
@@ -196,7 +196,7 @@ class Packet:
         self._raw_line = (
             f"{self._dto.verb} {self.seqn} {self._dto.addr1} "
             f"{self._dto.addr2} {self._dto.addr3} {self._dto.code} "
-            f"{self._dto.length} {self._dto.payload}"
+            f"{self._dto.length} {self._dto.raw_payload}"
         )
 
         try:
@@ -550,58 +550,34 @@ class Packet:
         return self._dto.raw_payload
 
     @property
-    def payload(self) -> PayloadBase | list[PayloadBase] | str:
-        """Return the typed payload dataclass object or raw hex string.
+    def payload(self) -> PayloadBase | list[PayloadBase] | None:
+        """Return the typed payload dataclass object.
 
-        TODO: Temporary fallback for PR 10 transition. In PR 12 of #1001,
-        this will exclusively return PayloadBase instances without raw
-        string fallbacks.
-
-        :returns: Strongly-typed payload object or raw hex string fallback
-        :rtype: Any
+        :returns: Strongly-typed payload object, or None if undecoded
+        :rtype: PayloadBase | list[PayloadBase] | None
         """
-        if self._dto.payload is not None:
-            return self._dto.payload
-        return PayloadT(self._dto.raw_payload)
+        return self._dto.payload
 
     @payload.setter
-    def payload(self, value: PayloadBase | list[PayloadBase] | str) -> None:
-        """Set the payload object or hex string (updates internal PacketDTO).
+    def payload(self, value: PayloadBase | list[PayloadBase] | None) -> None:
+        """Set the typed payload object (updates internal PacketDTO).
 
-        TODO: Temporary fallback for PR 10 transition. In PR 12 of #1001,
-        this setter will accept only PayloadBase dataclass instances.
-
-        :param value: New payload object or hex string
-        :type value: Any
+        :param value: New payload dataclass object
+        :type value: PayloadBase | list[PayloadBase] | None
         """
-        if isinstance(value, str):
-            self._dto = PacketDTO(
-                timestamp=self._dto.timestamp,
-                rssi=self._dto.rssi,
-                verb=self._dto.verb,
-                seq=self._dto.seq,
-                addr1=self._dto.addr1,
-                addr2=self._dto.addr2,
-                addr3=self._dto.addr3,
-                code=self._dto.code,
-                length=self._dto.length,
-                raw_payload=str(value),
-                payload=self._dto.payload,
-            )
-        else:
-            self._dto = PacketDTO(
-                timestamp=self._dto.timestamp,
-                rssi=self._dto.rssi,
-                verb=self._dto.verb,
-                seq=self._dto.seq,
-                addr1=self._dto.addr1,
-                addr2=self._dto.addr2,
-                addr3=self._dto.addr3,
-                code=self._dto.code,
-                length=self._dto.length,
-                raw_payload=self._dto.raw_payload,
-                payload=value,
-            )
+        self._dto = PacketDTO(
+            timestamp=self._dto.timestamp,
+            rssi=self._dto.rssi,
+            verb=self._dto.verb,
+            seq=self._dto.seq,
+            addr1=self._dto.addr1,
+            addr2=self._dto.addr2,
+            addr3=self._dto.addr3,
+            code=self._dto.code,
+            length=self._dto.length,
+            raw_payload=self._dto.raw_payload,
+            payload=value,
+        )
         self._raw_line = None
 
     @property

@@ -80,6 +80,8 @@ def extract_context_value(  # type: ignore[explicit-any]  # duck-typed payload/s
     :rtype: str | None
     """
     if payload is None:
+        if code == Code._3220 and len(raw_payload) >= 6:
+            return raw_payload[4:6]
         return raw_payload[:2] if len(raw_payload) >= 2 else None
 
     if isinstance(payload, str):

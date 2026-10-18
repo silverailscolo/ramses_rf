@@ -32,6 +32,7 @@ def test_packet_to_dto_populates_all_fields_accurately() -> None:
     assert dto.code == Code._000A
     assert dto.length == "002"
     assert dto.raw_payload == "0800"
+    assert dto.payload is None
 
 
 def test_packet_to_dto_enforces_strict_verb_padding() -> None:
@@ -68,7 +69,7 @@ def test_packet_dto_is_tx_default_and_custom() -> None:
         addr3="--:------",
         code=Code._000A,
         length="002",
-        payload="0800",
+        raw_payload="0800",
     )
     outbound_dto = PacketDTO(
         timestamp=test_dtm,
@@ -80,7 +81,7 @@ def test_packet_dto_is_tx_default_and_custom() -> None:
         addr3="--:------",
         code=Code._000A,
         length="002",
-        payload="0800",
+        raw_payload="0800",
         is_tx=True,
     )
 
