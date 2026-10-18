@@ -502,10 +502,11 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
                 now_dtm = (
                     now.replace(tzinfo=None) if now.tzinfo is not None else now
                 )
-                if not isinstance(p.payload, str):
+                if len(p.raw_payload) < 6:
                     return False
                 return bool(
-                    p_dtm + td(seconds=int(p.payload[2:6], 16) / 10) > now_dtm
+                    p_dtm + td(seconds=int(p.raw_payload[2:6], 16) / 10)
+                    > now_dtm
                 )
 
             self._tracked_sync_cycles = deque(

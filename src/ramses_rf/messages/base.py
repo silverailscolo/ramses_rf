@@ -174,7 +174,7 @@ class Message:
         """
         seq_str = sequence_number if sequence_number else "---"
         dto = self._dto
-        return f"{dto.verb} {seq_str} {dto.addr1} {dto.addr2} {dto.addr3} {dto.code} {dto.length} {dto.payload}"
+        return f"{dto.verb} {seq_str} {dto.addr1} {dto.addr2} {dto.addr3} {dto.code} {dto.length} {dto.raw_payload}"
 
     @property
     def raw_payload(self) -> str:
@@ -316,13 +316,13 @@ class Message:
             self.dst,
             self.verb,
             self.code,
-            self._dto.payload,
+            self._dto.raw_payload,
         ) == (
             other.src,
             other.dst,
             other.verb,
             other.code,
-            other._dto.payload,
+            other._dto.raw_payload,
         )
 
     def __lt__(self, other: object) -> bool:
