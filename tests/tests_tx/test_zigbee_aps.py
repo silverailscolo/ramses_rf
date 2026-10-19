@@ -1,35 +1,47 @@
 """Native APS acknowledgements must pace writes without ASCII control traffic."""
 
 import asyncio
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from zigpy import types
-from zigpy.zcl import Cluster, foundation
 
 from ramses_tx import exceptions as exc
 
 from .test_transport_zigbee import _VALID_URL, _make_transport
 
 
-class NativeTXCluster(Cluster):
-    """Use the same command schema as the current ELECRAM ZHA quirk."""
+def native_tx_cluster(endpoint: Any) -> Any:
+    """Build the real quirk-style cluster only for zigpy integration tests."""
+    pytest.importorskip("zigpy.zcl")
+    from zigpy import types
+    from zigpy.zcl import Cluster, foundation
 
-    cluster_id = 0xFC01
+    client_commands = type(
+        "ClientCommandDefs",
+        (foundation.BaseCommandDefs,),
+        {
+            "send_chunk": foundation.ZCLCommandDef(
+                id=0x02,
+                schema={
+                    "message_id": types.uint32_t,
+                    "sequence": types.uint8_t,
+                    "total": types.uint8_t,
+                    "text": types.CharacterString,
+                },
+            ),
+            "native_mode": foundation.ZCLCommandDef(
+                id=0x03, schema={"enabled": types.Bool}
+            ),
+        },
+    )
+    native_cluster = type(
+        "NativeTXCluster",
+        (Cluster,),
+        {"cluster_id": 0xFC01, "ClientCommandDefs": client_commands},
+    )
 
-    class ClientCommandDefs(foundation.BaseCommandDefs):
-        send_chunk = foundation.ZCLCommandDef(
-            id=0x02,
-            schema={
-                "message_id": types.uint32_t,
-                "sequence": types.uint8_t,
-                "total": types.uint8_t,
-                "text": types.CharacterString,
-            },
-        )
-        native_mode = foundation.ZCLCommandDef(
-            id=0x03, schema={"enabled": types.Bool}
-        )
+    return native_cluster(endpoint, is_server=True)
 
 
 def test_existing_urls_keep_legacy_acknowledgements() -> None:
@@ -57,11 +69,14 @@ def test_aps_reassembly_never_schedules_ascii_ack(callback: str) -> None:
 async def test_real_zigpy_serialization_requests_aps_ack_without_zcl_reply() -> (
     None
 ):
+    pytest.importorskip("zigpy.zcl")
+    from zigpy.zcl import foundation
+
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     endpoint = MagicMock()
     endpoint.reply = AsyncMock()
     endpoint.device.get_sequence.return_value = 7
-    cluster = NativeTXCluster(endpoint, is_server=True)
+    cluster = native_tx_cluster(endpoint)
     transport._get_active_write_cluster = MagicMock(return_value=cluster)
     transport._native_message_id = 0x12345678
     await transport._send_command("hello", 1, 2)

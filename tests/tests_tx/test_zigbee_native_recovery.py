@@ -1,6 +1,7 @@
 """An incomplete native frame must never contaminate a subsequent RF frame."""
 
 from datetime import timedelta as td
+from typing import NamedTuple
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,7 +13,15 @@ from .test_transport_zigbee import (
     _make_transport,
     _transport_with_device,
 )
-from .test_zigbee_aps import NativeTXCluster
+
+
+class NativeChunk(NamedTuple):
+    """Named fields matching zigpy's decoded native command schema."""
+
+    message_id: int
+    sequence: int
+    total: int
+    text: str
 
 
 def test_expired_native_assembly_discards_late_tail() -> None:
@@ -64,7 +73,7 @@ def test_changed_total_aborts_current_native_message() -> None:
 def test_schema_object_from_quirk_is_accepted() -> None:
     transport = _make_transport(f"{_VALID_URL}?ack=aps")
     transport._frame_read = MagicMock()
-    schema = NativeTXCluster.ClientCommandDefs.send_chunk.schema
+    schema = NativeChunk
     transport.cluster_command(
         1, 2, schema(message_id=100, sequence=1, total=1, text="frame")
     )

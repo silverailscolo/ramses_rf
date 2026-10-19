@@ -6,12 +6,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ... import exceptions as exc
-
-if TYPE_CHECKING:
-    from zigpy.types import EUI64 as ZigbeeIEEE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -143,7 +140,7 @@ class ZigbeeConnectionManager:
         gateway = self._zha_gateway or self._current_gateway()
         if gateway is None:
             return None
-        ieee: ZigbeeIEEE | str
+        ieee: object
         try:
             from zigpy.types import EUI64
 
