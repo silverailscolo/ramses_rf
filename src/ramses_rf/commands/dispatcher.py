@@ -8,10 +8,13 @@ from typing import TYPE_CHECKING
 
 from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command
+from ramses_rf.enums import Action
 from ramses_rf.interfaces import GatewayInterface
 from ramses_rf.messages import Message
+from ramses_rf.models.hvac_schemas import FanParamInfo
+from ramses_rf.payloads.hvac import HvacFanParamPayload
 from ramses_tx import Priority
-from ramses_tx.const import DEFAULT_WAIT_FOR_REPLY
+from ramses_tx.const import DEFAULT_WAIT_FOR_REPLY, RP, Code
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.exceptions import ProtocolSendFailed
 
@@ -98,6 +101,26 @@ class CommandDispatcher:
         :rtype: Message
         """
         self._check_transmission_policy(intent)
+        if (
+            intent.action == Action.SET_FAN_PARAM
+            and intent.get("param_id", "").strip().upper() == "52"
+            and (store := self._gateway.message_store) is not None
+        ):
+            messages = await store.get(
+                source=intent.dst.id, code=Code._2411, verb=RP
+            )
+            for msg in sorted(messages, key=lambda msg: msg.dtm, reverse=True):
+                definition = HvacFanParamPayload.from_bytes(
+                    bytes.fromhex(msg.raw_payload)
+                )
+                if definition.parameter_id == 0x52:
+                    if definition.data_type == 0x01:
+                        intent = intent.with_data(
+                            fan_param_schema=FanParamInfo(
+                                "Sensor sensitivity (%)", 0, 25, 0.1, "01", "%"
+                            )
+                        )
+                    break
         dto: CommandDTO = build_dto(intent)
         conv_mgr = self._gateway.conversation_manager
 
