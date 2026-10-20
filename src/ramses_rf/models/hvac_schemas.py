@@ -71,7 +71,14 @@ _22F1_SCHEMES: dict[str, dict[str, str]] = {
 # Note: semantics of a given param_id can differ per device family (e.g.
 # ClimaRad Ventura vs Orcon); where the two former tables conflicted, the
 # legacy protocol.ramses entries won as they were validated against real
-# traffic for years (and restore the pre-0.59.1 write behaviour).
+# traffic for years (and restore the pre-0.59.1 write behaviour). These
+# static entries are only the fallback: a definition reported by the device
+# itself (cached on the HvacVentilator from RP/I 2411 frames) takes
+# precedence when writing the parameter.
+_2411_ENCODABLE_DATA_TYPES: frozenset[str] = frozenset(
+    {"00", "01", "0F", "10", "20", "90", "92"}
+)  # keep in sync with the match cases in build_set_fan_param
+
 _2411_PARAMS_SCHEMA: dict[str, FanParamInfo] = {
     "01": FanParamInfo("Support", 255, 255, 1, "20", ""),
     "07": FanParamInfo(  # ClimaRad Ventura (issue 740)

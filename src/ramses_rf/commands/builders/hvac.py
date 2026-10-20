@@ -360,11 +360,12 @@ def build_set_fan_param(intent: Command) -> CommandDTO:
             "Must be a 2-digit hexadecimal value (00-FF)"
         ) from err
 
-    param_schema = _2411_PARAMS_SCHEMA.get(param_id_stripped)
-    if param_id_stripped == "52" and isinstance(
-        definition := intent.get("fan_param_schema"), FanParamInfo
-    ):
-        param_schema = definition
+    schema_override = intent.get("fan_param_schema")
+    param_schema = (
+        schema_override
+        if isinstance(schema_override, FanParamInfo)
+        else _2411_PARAMS_SCHEMA.get(param_id_stripped)
+    )
     if param_schema is None:
         raise ValueError(
             f"Unknown parameter ID: '{param_id_stripped}'. "
