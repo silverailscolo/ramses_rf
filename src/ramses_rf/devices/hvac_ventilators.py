@@ -50,6 +50,12 @@ from ramses_rf.enums import Action
 from ramses_rf.helpers import shrink
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits, HvacState
+from ramses_rf.models.hvac_schemas import (
+    _2411_ENCODABLE_DATA_TYPES,
+    _2411_PARAMS_SCHEMA,
+    FanParamInfo,
+)
+from ramses_rf.payloads.hvac import HvacFanParamPayload
 from ramses_rf.typing import SchemaT
 from ramses_tx import Priority
 from ramses_tx.typing import DeviceIdT
@@ -164,6 +170,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     # FAN-specific instance attributes (initialized in _init_fan_state)
     _supports_2411: bool
     _params_2411: dict[str, float]
+    _params_2411_schema: dict[str, FanParamInfo]
     _initialized_callback: Callable[[], None] | None
     _param_update_callback: Callable[[str, Any], None] | None  # type: ignore[explicit-any]  # heterogeneous 2411 value
     _hgi: HgiGateway | None
@@ -187,6 +194,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         """Initialize FAN-specific instance attributes (idempotent)."""
         self.__dict__.setdefault("_supports_2411", False)
         self.__dict__.setdefault("_params_2411", {})
+        self.__dict__.setdefault("_params_2411_schema", {})
         self.__dict__.setdefault("_initialized_callback", None)
         self.__dict__.setdefault("_param_update_callback", None)
         self.__dict__.setdefault("_hgi", None)
@@ -522,6 +530,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             _LOGGER.debug("Invalid 2411 message format: %s", msg)
             return
 
+        self._store_2411_param_schema(msg)
+
         param_id = msg.payload.get("parameter")
         param_value = msg.payload.get("value")
 
@@ -562,6 +572,70 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
         # call the 2411 parameter update callback
         self._handle_param_update(param_id, param_value)
+
+    def _store_2411_param_schema(self, msg: Message) -> None:
+        """Cache the device-reported parameter definition from a 2411 frame.
+
+        A fan states each parameter's data_type/min/max/precision in its RP
+        and I 2411 payloads. That definition is authoritative for this
+        device and takes precedence over the static `_2411_PARAMS_SCHEMA`
+        when the parameter is written (they can differ per device family,
+        e.g. param 52 is a timer on some models and sensor sensitivity on
+        others). See https://github.com/ramses-rf/ramses_rf/issues/1332.
+
+        Incomplete replies (short N/A payloads, sentinel fields) and data
+        types the command builders cannot encode are ignored, so a write
+        falls back to the static schema instead of failing.
+
+        :param msg: The incoming 2411 message
+        :type msg: Message
+        """
+        if (
+            msg.src.id != self.id
+        ):  # only the fan's own frames are authoritative
+            return
+        try:
+            definition = HvacFanParamPayload.from_bytes(
+                bytes.fromhex(msg.raw_payload)
+            )
+        except (TypeError, ValueError):
+            return
+        if (
+            definition._raw_3b is not None
+            or definition.min_value_scaled is None
+            or definition.max_value_scaled is None
+            or not definition.precision_scaled
+            or f"{definition.data_type:02X}" not in _2411_ENCODABLE_DATA_TYPES
+        ):
+            return
+
+        param_id = f"{definition.parameter_id:02X}"
+        static = _2411_PARAMS_SCHEMA.get(param_id)
+        self._params_2411_schema[param_id] = FanParamInfo(
+            description=(
+                static.description if static else f"Parameter {param_id}"
+            ),
+            min_value=float(definition.min_value_scaled),
+            max_value=float(definition.max_value_scaled),
+            precision=float(definition.precision_scaled),
+            data_type=f"{definition.data_type:02X}",
+            data_unit=static.data_unit if static else "",
+        )
+
+    def get_2411_param_schema(self, param_id: str) -> FanParamInfo | None:
+        """Return the device-reported parameter definition, if observed.
+
+        :param param_id: The parameter ID, with or without leading zeros
+            ("7" and "07" both resolve to "07").
+        :type param_id: str
+        :returns: The cached device-reported schema, or None.
+        :rtype: FanParamInfo | None
+        """
+        try:
+            key = f"{int(str(param_id), 16):02X}"
+        except ValueError:
+            return None
+        return self._params_2411_schema.get(key)
 
     def add_bound_device(self, device_id: str, device_type: str) -> None:
         """Add a bound device to this FAN.
