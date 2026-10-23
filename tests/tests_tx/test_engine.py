@@ -31,7 +31,7 @@ def mock_dto() -> PacketDTO:
         addr3="--:------",
         code=Code._1FC9,
         length="001",
-        payload="00",
+        raw_payload="00",
     )
 
 
@@ -262,7 +262,7 @@ async def test_engine_drop_msg(
         addr3="--:------",
         code=Code._1FC9,
         length="001",
-        payload="00",
+        raw_payload="00",
     )
     msg = ApplicationMessage(dto)
     with caplog.at_level(logging.DEBUG):

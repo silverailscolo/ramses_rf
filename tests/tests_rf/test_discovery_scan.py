@@ -38,6 +38,7 @@ from ramses_rf.discovery_scan import (
     _should_update_domain_id,
     dev_type_from_prefix,
 )
+from ramses_rf.payloads.heating import HeatDemand2BPayload
 from ramses_tx.const import SZ_ACTIVE_HGI
 from ramses_tx.dtos import PacketDTO
 
@@ -171,6 +172,18 @@ class TestExtractZoneIdx:
     def test_zone_lowercase(self) -> None:
         # Should normalise to uppercase
         assert _extract_zone_index_from_payload("0a00") == "0A"
+
+    def test_decoded_3150_domain_or_zone_index(self) -> None:
+        # HeatDemand2B (3150) carries the index as domain_or_zone_index,
+        # not zone_index — a decoded payload object must still yield the
+        # zone index (ramses-rf/ramses_cc#1345)
+        payload = HeatDemand2BPayload.from_bytes(bytes.fromhex("02C8"))
+        assert _extract_zone_index_from_payload(payload) == "02"
+
+    def test_decoded_3150_domain_rejected(self) -> None:
+        # A domain index (FC appliance_control) is not a zone index
+        payload = HeatDemand2BPayload.from_bytes(bytes.fromhex("FCC8"))
+        assert _extract_zone_index_from_payload(payload) is None
 
 
 class TestIsApplianceControlSignal:
@@ -1414,6 +1427,59 @@ class TestDiscoveryScanPacketHandling:
         assert dev.bound_to == "01:145038"
         assert dev.confidence == "high"
 
+    def test_zone_binding_extracted_from_addr3_on_i_frame(self) -> None:
+        """Directed I frames place the peer CTL in addr3 with addr2=--:------.
+
+        Regression for ramses-rf/ramses_cc#1353: real TRV I packets
+        (e.g. ``I --- 04:034039 --:------ 01:256581 12B0 003 060000``)
+        carry the controller in addr3; bound_to must be populated for
+        both new and known devices so neighbour TRVs stay attributed to
+        their own controller.
+        """
+        gwy = make_mock_gateway(known_list={"04:086351": {"class": "TRV"}})
+        scan = DiscoveryScan(gwy)
+        # Unknown neighbour TRV addressing neighbour CTL in addr3
+        scan._process_packet(
+            make_dto(
+                src="04:034039",
+                dst="--:------",
+                addr3="01:256581",
+                code=Code._12B0,
+                verb=Verb.I_,
+                payload="060000",
+            )
+        )
+        foreign_trv = scan.get_device("04:034039")
+        assert foreign_trv is not None
+        assert foreign_trv.zone_index == "06"
+        assert foreign_trv.bound_to == "01:256581"
+
+        # Known TRV enriched on second packet with CTL in addr3
+        scan._process_packet(
+            make_dto(
+                src="04:086351",
+                dst="--:------",
+                addr3="04:086351",
+                code=Code._30C9,
+                verb=Verb.I_,
+                payload="0007D9",
+            )
+        )
+        scan._process_packet(
+            make_dto(
+                src="04:086351",
+                dst="--:------",
+                addr3="01:208973",
+                code=Code._3150,
+                verb=Verb.I_,
+                payload="01C8",
+            )
+        )
+        own_trv = scan.get_device("04:086351")
+        assert own_trv is not None
+        assert own_trv.zone_index == "01"
+        assert own_trv.bound_to == "01:208973"
+
     def test_thm_zone_binding_via_000a(self) -> None:
         """THM (22:) sends RQ 000A with its zone_index as payload (issue 813).
 
@@ -1455,6 +1521,48 @@ class TestDiscoveryScanPacketHandling:
         # CTL must NOT have zone_index set
         assert dev.zone_index is None
         assert dev.bound_to is None
+
+    def test_self_addressed_2309_sets_no_zone_index(self) -> None:
+        """A self-addressed 2309 is not zone evidence (ramses_cc#1182).
+
+        Standalone UFH thermostats (22:) broadcast their setpoint to
+        themselves (addr3 == src) with an internal stat index of "00" —
+        not a CTL zone index.  Stamping "00" made ramses_cc move the THM
+        into zone 00's actuators on every reload.
+        """
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(
+                src="22:072769",
+                dst="--:------",
+                addr3="22:072769",
+                code=Code._2309,
+                payload="0001F4",
+            )
+        )
+        dev = scan.get_device("22:072769")
+        assert dev is not None
+        assert dev.zone_index is None
+        assert dev.bound_to is None
+
+    def test_directed_2309_sets_zone_index(self) -> None:
+        """A 2309 directed at a CTL still carries the bound zone index."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(
+                src="04:088729",
+                dst="--:------",
+                addr3="01:068717",
+                code=Code._2309,
+                payload="0001F4",
+            )
+        )
+        dev = scan.get_device("04:088729")
+        assert dev is not None
+        assert dev.zone_index == "00"
+        assert dev.bound_to == "01:068717"
 
     def test_bdr_3b00_sets_domain_id_fc(self) -> None:
         """BDR broadcasting 3B00 as I sets domain_id=FC (issue 834).
@@ -1611,6 +1719,89 @@ class TestDiscoveryScanPacketHandling:
         )
         # 18:73030 is broadcast — should not be in discovery list
         assert scan.get_device("18:73030") is None
+
+    def test_dst_unknown_prefix_not_registered(self) -> None:
+        """A dst-only address with an unknown prefix is not registered.
+
+        Regression: an unbound one-way remote keeps transmitting to its
+        stale binding target (``I --- 29:176861 62:008256 --:------
+        22F1``).  The ghost dst was registered as a DEV/low device and
+        surfaced as a spurious new discovery.
+        """
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(
+                src="29:176861",
+                dst="62:008256",
+                code=Code._22F1,
+                payload="000104",
+            )
+        )
+        # src has a known prefix so it is still registered
+        assert scan.get_device("29:176861") is not None
+        assert scan.get_device("62:008256") is None
+
+    def test_addr3_unknown_prefix_not_registered(self) -> None:
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(
+                src="01:145038",
+                dst="18:006402",
+                addr3="62:008256",
+                code=Code._000C,
+            )
+        )
+        assert scan.get_device("62:008256") is None
+
+    def test_src_unknown_prefix_registered(self) -> None:
+        """A real transmitter is registered even with an unknown prefix."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(src="62:008256", dst="--:------", code=Code._22F1)
+        )
+        dev = scan.get_device("62:008256")
+        assert dev is not None
+        assert dev.source_count == 1
+
+    def test_dst_unknown_prefix_tracked_device_still_enriched(self) -> None:
+        """A tracked unknown-prefix device still counts dst packets."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        # register 62:008256 as a real transmitter first
+        scan._process_packet(
+            make_dto(src="62:008256", dst="--:------", code=Code._22F1)
+        )
+        scan._process_packet(
+            make_dto(
+                src="29:176861",
+                dst="62:008256",
+                code=Code._22F1,
+                payload="000104",
+            )
+        )
+        dev = scan.get_device("62:008256")
+        assert dev is not None
+        assert dev.destination_count == 1
+
+    def test_zone_bound_to_unknown_prefix_dst_not_set(self) -> None:
+        """bound_to is not pointed at an unregistrable dst address."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(
+                src="04:056053",
+                dst="62:008256",
+                code=Code._3150,
+                payload="02C8",
+            )
+        )
+        dev = scan.get_device("04:056053")
+        assert dev is not None
+        assert dev.zone_index == "02"
+        assert dev.bound_to is None
 
     def test_hvac_fan_discovered(self) -> None:
         gwy = make_mock_gateway()
@@ -1855,6 +2046,97 @@ class TestDiscoveryScanExportImport:
         data = json.loads(scan.export_json())
         ids = [d["device_id"] for d in data["devices"]]
         assert ids == sorted(ids)
+
+    def test_import_drops_dst_only_unknown_prefix(self) -> None:
+        """Persisted dst-only ghosts are dropped on import."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan.import_json(
+            json.dumps(
+                {
+                    "version": 1,
+                    "devices": [
+                        {
+                            "device_id": "62:008256",
+                            "first_seen": "2026-10-16T09:57:27",
+                            "last_seen": "2026-10-16T10:13:13",
+                            "likely_type": "DEV",
+                            "codes_seen": [Code._22F1],
+                            "source_count": 0,
+                            "destination_count": 30,
+                        }
+                    ],
+                }
+            )
+        )
+        assert scan.get_device("62:008256") is None
+
+    def test_import_keeps_unknown_prefix_transmitter(self) -> None:
+        """An unknown-prefix device that transmitted is retained."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan.import_json(
+            json.dumps(
+                {
+                    "version": 1,
+                    "devices": [
+                        {
+                            "device_id": "62:008256",
+                            "first_seen": "2026-10-16T09:57:27",
+                            "last_seen": "2026-10-16T10:13:13",
+                            "likely_type": "DEV",
+                            "codes_seen": [Code._22F1],
+                            "source_count": 3,
+                        }
+                    ],
+                }
+            )
+        )
+        assert scan.get_device("62:008256") is not None
+
+    def test_import_keeps_declared_unknown_prefix(self) -> None:
+        """A user-declared device is retained even with an unknown prefix."""
+        gwy = make_mock_gateway(known_list={"62:008256": {"class": "DEV"}})
+        scan = DiscoveryScan(gwy)
+        scan.import_json(
+            json.dumps(
+                {
+                    "version": 1,
+                    "devices": [
+                        {
+                            "device_id": "62:008256",
+                            "first_seen": "2026-10-16T09:57:27",
+                            "last_seen": "2026-10-16T10:13:13",
+                            "likely_type": "DEV",
+                            "source_count": 0,
+                        }
+                    ],
+                }
+            )
+        )
+        assert scan.get_device("62:008256") is not None
+
+    def test_import_drops_invalid_address(self) -> None:
+        """Sentinel/malformed addresses are dropped on import."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan.import_json(
+            json.dumps(
+                {
+                    "version": 1,
+                    "devices": [
+                        {
+                            "device_id": "63:262142",
+                            "first_seen": "2026-10-16T09:57:27",
+                            "last_seen": "2026-10-16T10:13:13",
+                            "likely_type": "DEV",
+                            "destination_count": 5,
+                        }
+                    ],
+                }
+            )
+        )
+        assert scan.get_device("63:262142") is None
 
 
 # ---------------------------------------------------------------------------

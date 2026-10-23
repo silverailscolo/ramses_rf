@@ -189,7 +189,9 @@ from ramses_rf.protocol.opentherm import (
     OtDataId,
 )
 from ramses_rf.state_projector import (
+    _ctl_is_zone_sensor,
     _get_dhw_zone_from_msg,
+    _is_foreign_zone_sync,
     _route_2411_to_fan,
 )
 from ramses_rf.typing import PayloadT
@@ -393,29 +395,53 @@ class StateProjector:
                         )
 
             # Route CQRS state to Systems (TCS) and Zones
-            zone_val = payload.get(SZ_ZONE_INDEX, payload.get(SZ_ZONE_INDEX))
-            if zone_val is not None and msg.src.id in system_by_id:
-                tcs = system_by_id[msg.src.id]
-                zone = tcs.zone_by_index.get(str(zone_val))
-                if zone:
-                    try:
-                        self._update_zone_state(zone, payload, msg)
-                        # 2309/2349 also carry a setpoint that the Zone's
-                        # `setpoint` property reads from temp_state.  Without
-                        # this, the zone climate entity's target_temperature
-                        # stays None (issue 843).
-                        # 30C9 carries the zone temperature that the Zone's
-                        # `temperature` property reads from temp_state.
-                        # Without this, the zone climate entity's
-                        # current_temperature stays None (issue 927).
-                        if msg.code in (Code._2309, Code._2349, Code._30C9):
-                            self._update_temperature_state(zone, payload, msg)
-                    except Exception as err:
-                        _LOGGER.error(
-                            "CQRS extraction failed for zone %s: %s",
-                            zone.id,
-                            err,
-                        )
+            zone_index_value = payload.get(SZ_ZONE_INDEX)
+            if zone_index_value is not None:
+                if msg.src.id in system_by_id:
+                    tcs = system_by_id[msg.src.id]
+                    zone = tcs.zone_by_index.get(str(zone_index_value))
+                    if zone:
+                        try:
+                            self._update_zone_state(zone, payload, msg)
+                            # 2309/2349 also carry a setpoint that the Zone's
+                            # `setpoint` property reads from temp_state.  Without
+                            # this, the zone climate entity's target_temperature
+                            # stays None (issue 843).
+                            # 30C9 carries the zone temperature that the Zone's
+                            # `temperature` property reads from temp_state.
+                            # Without this, the zone climate entity's
+                            # current_temperature stays None (issue 927).
+                            if msg.code in (
+                                Code._2309,
+                                Code._2349,
+                                Code._30C9,
+                            ):
+                                self._update_temperature_state(
+                                    zone, payload, msg
+                                )
+                            elif msg.code in (Code._3150, Code._0008):
+                                self._update_demand_state(zone, payload, msg)
+                        except Exception as err:
+                            _LOGGER.error(
+                                "CQRS extraction failed for zone %s: %s",
+                                zone.id,
+                                err,
+                            )
+                elif (
+                    msg.code in (Code._3150, Code._0008)
+                    and getattr(msg.dst, "id", "") in system_by_id
+                ):
+                    tcs = system_by_id[msg.dst.id]
+                    zone = tcs.zone_by_index.get(str(zone_index_value))
+                    if zone:
+                        try:
+                            self._update_demand_state(zone, payload, msg)
+                        except Exception as err:
+                            _LOGGER.error(
+                                "CQRS extraction failed for zone %s: %s",
+                                zone.id,
+                                err,
+                            )
 
             # Route 30C9 from a sensor to its parent zone.  Sensor-sourced
             # 30C9 packets have no zone_index in the decoded payload (the
@@ -439,7 +465,15 @@ class StateProjector:
                     # A declared-but-unbindable sensor (e.g. a CTL used as
                     # room thermostat) must also block the sole-actuator
                     # fallback (ramses-rf/ramses_cc#1328).
-                    if src_dev is parent_sensor or (
+                    # A parent-bound controller's indexed 30C9 is a sync
+                    # report for the indexed zone, not its own reading —
+                    # do not fan it into the zone bound to it as sensor.
+                    if (
+                        src_dev is parent_sensor
+                        and not _is_foreign_zone_sync(
+                            parent, src_dev, payload.get(SZ_ZONE_INDEX)
+                        )
+                    ) or (
                         parent_sensor is None
                         and getattr(parent, "_declared_sensor_id", None)
                         is None
@@ -1152,13 +1186,29 @@ class StateProjector:
             if SZ_TEMPERATURE in payload:
                 # Legacy Parity: Physical sensors only track their own local sensor readings.
                 # We must ignore Zone temperature syncs sent TO them by the Controller.
+                # Symmetrically, a CTL/UFC ignores an actuator's report addressed
+                # to it — its temp_state is its own measured temperature, not the
+                # reporting device's (ramses-rf/ramses_cc#1328).  Its own indexed
+                # zone syncs likewise carry child state: only the sync of the
+                # zone it senses is its own ambient (ramses-rf/ramses_rf#1315).
                 # Keep same as src/ramses_rf/dispatcher.py#_update_temperature_state
                 target_id = getattr(target, "id", str(target))
                 src_id = msg.src.id
 
+                slug = getattr(target, "_SLUG", "")
                 if (
-                    getattr(target, "_SLUG", "") in (DevType.TRV, DevType.THM)
+                    slug
+                    in (
+                        DevType.TRV,
+                        DevType.THM,
+                        DevType.CTL,
+                        DevType.UFC,
+                    )
                     and src_id != target_id
+                ) or (
+                    slug in (DevType.CTL, DevType.UFC)
+                    and payload.get(SZ_ZONE_INDEX) is not None
+                    and not _ctl_is_zone_sensor(target, payload[SZ_ZONE_INDEX])
                 ):
                     pass
                 else:
@@ -1287,6 +1337,14 @@ class StateProjector:
                 heat_dict = getattr(tcs, "_heat_demands", None)
                 if heat_dict is not None:
                     heat_dict[domain] = msg
+            if (
+                domain
+                and msg.code == Code._0009
+                and SZ_FAILSAFE_ENABLED in payload
+            ):
+                failsafe_dict = getattr(tcs, "_relay_failsafes", None)
+                if failsafe_dict is not None:
+                    failsafe_dict[domain] = payload
 
     def _update_ufh_state(
         self, target: Entity, payload: PayloadT, msg: Message
@@ -1319,8 +1377,6 @@ class StateProjector:
             for key in (
                 SZ_UFH_INDEX,
                 SZ_CIRCUIT_INDEX,
-                SZ_ZONE_INDEX,
-                SZ_DOMAIN_OR_ZONE_INDEX,
             ):
                 if (raw_index := data.get(key)) is not None:
                     return (
@@ -1330,40 +1386,136 @@ class StateProjector:
                     )
             return None
 
+        def _normalise_index(raw_value: object) -> str | None:
+            """Normalise integer or string indices to uppercase hex.
+
+            :param raw_value: Raw index value from payload or entity.
+            :type raw_value: object
+            :returns: Normalised uppercase index string or None.
+            :rtype: str | None
+            """
+            if raw_value is None:
+                return None
+            if isinstance(raw_value, int):
+                return f"{raw_value:02X}"
+            return str(raw_value).upper()
+
+        circuit_index: str | None = None
         match msg.code:
             case Code._3150:
-                domain = (
-                    payload.get(SZ_DOMAIN_INDEX)
-                    or payload.get(SZ_DOMAIN_ID_WIRE)
-                    or payload.get(SZ_DOMAIN_INDEX)
+                domain = payload.get(SZ_DOMAIN_INDEX) or payload.get(
+                    SZ_DOMAIN_ID_WIRE
                 )
                 if domain == FA and SZ_HEAT_DEMAND in payload:
                     updates[SZ_RELAY_DEMAND_FA] = payload[SZ_HEAT_DEMAND]
                 elif domain == FC and SZ_HEAT_DEMAND in payload:
                     updates[SZ_RELAY_DEMAND_FC] = payload[SZ_HEAT_DEMAND]
 
-                circuit_index = _get_circuit_index(payload)
-                if circuit_index is not None and SZ_HEAT_DEMAND in payload:
+                target_circuit_indices: list[str] = []
+                direct_circuit_index = _get_circuit_index(payload)
+                if direct_circuit_index is not None:
+                    target_circuit_indices.append(direct_circuit_index)
+                elif (
+                    raw_zone := (
+                        payload.get(SZ_ZONE_INDEX)
+                        or payload.get(SZ_DOMAIN_OR_ZONE_INDEX)
+                    )
+                ) is not None:
+                    target_zone = _normalise_index(raw_zone)
+
+                    # 1. Check bound circuits on UFC entity
+                    circuits = getattr(target, "circuits", None)
+                    if isinstance(circuits, list):
+                        for circuit_item in circuits:
+                            circuit_zone_index = _normalise_index(
+                                getattr(circuit_item, "zone_index", None)
+                            )
+                            if (
+                                circuit_zone_index is not None
+                                and circuit_zone_index == target_zone
+                            ):
+                                bound_circuit_index = getattr(
+                                    circuit_item, "ufh_index", None
+                                )
+                                if bound_circuit_index is None:
+                                    bound_circuit_index = getattr(
+                                        circuit_item, "_child_id", None
+                                    )
+                                if bound_circuit_index is not None:
+                                    target_circuit_indices.append(
+                                        str(bound_circuit_index)
+                                    )
+
+                    # 2. Check current_state mappings if entity unpopulated
+                    if not target_circuit_indices:
+                        if current_state.circuit_to_zone_map:
+                            for (
+                                bound_circuit_index,
+                                mapped_zone,
+                            ) in current_state.circuit_to_zone_map.items():
+                                if (
+                                    _normalise_index(mapped_zone)
+                                    == target_zone
+                                ):
+                                    target_circuit_indices.append(
+                                        str(bound_circuit_index)
+                                    )
+                        elif current_state.circuits:
+                            for (
+                                bound_circuit_index,
+                                circuit_state,
+                            ) in current_state.circuits.items():
+                                if (
+                                    _normalise_index(circuit_state.zone_index)
+                                    == target_zone
+                                ):
+                                    target_circuit_indices.append(
+                                        str(bound_circuit_index)
+                                    )
+
+                    # 3. Check target.circuit_by_id fallback mapping
+                    if not target_circuit_indices:
+                        fallback_circuits = getattr(
+                            target, "circuit_by_id", None
+                        )
+                        if isinstance(fallback_circuits, dict):
+                            for (
+                                bound_circuit_index,
+                                entry,
+                            ) in fallback_circuits.items():
+                                if isinstance(entry, dict):
+                                    entry_zone = entry.get(SZ_ZONE_INDEX)
+                                    if (
+                                        _normalise_index(entry_zone)
+                                        == target_zone
+                                    ):
+                                        target_circuit_indices.append(
+                                            str(bound_circuit_index)
+                                        )
+
+                if target_circuit_indices and SZ_HEAT_DEMAND in payload:
                     heat_value = (
                         float(payload[SZ_HEAT_DEMAND])
                         if payload[SZ_HEAT_DEMAND] is not None
                         else None
                     )
                     new_demands = dict(current_state.heat_demands)
-                    new_demands[circuit_index] = heat_value
+                    for target_circuit_index in target_circuit_indices:
+                        new_demands[target_circuit_index] = heat_value
+                        circuit = _get_circuit(target_circuit_index)
+                        circuit_kwargs: PayloadT = {SZ_HEAT_DEMAND: heat_value}
+                        if dtm:
+                            circuit_kwargs[SZ_LAST_UPDATED] = dtm
+                        new_circuits[target_circuit_index] = (
+                            dataclasses.replace(circuit, **circuit_kwargs)
+                        )
                     updates[SZ_HEAT_DEMANDS] = new_demands
-
-                    circuit = _get_circuit(circuit_index)
-                    circuit_kwargs: PayloadT = {SZ_HEAT_DEMAND: heat_value}
-                    if dtm:
-                        circuit_kwargs[SZ_LAST_UPDATED] = dtm
-                    new_circuits[circuit_index] = dataclasses.replace(
-                        circuit, **circuit_kwargs
-                    )
                     updates[SZ_CIRCUITS] = new_circuits
 
             case Code._2D49:
-                circuit_index = _get_circuit_index(payload)
+                circuit_index = _get_circuit_index(
+                    payload
+                ) or _normalise_index(payload.get(SZ_DOMAIN_OR_ZONE_INDEX))
                 cooling_value = payload.get(
                     SZ_COOLING_DEMAND,
                     payload.get(SZ_STATE, payload.get(SZ_COOLING_ACTIVE)),
@@ -1406,10 +1558,8 @@ class StateProjector:
                     updates[SZ_CIRCUITS] = new_circuits
 
             case Code._0008:
-                domain = (
-                    payload.get(SZ_DOMAIN_INDEX)
-                    or payload.get(SZ_DOMAIN_ID_WIRE)
-                    or payload.get(SZ_DOMAIN_INDEX)
+                domain = payload.get(SZ_DOMAIN_INDEX) or payload.get(
+                    SZ_DOMAIN_ID_WIRE
                 )
                 if domain == FA and SZ_RELAY_DEMAND in payload:
                     updates[SZ_RELAY_DEMAND_FA] = payload[SZ_RELAY_DEMAND]

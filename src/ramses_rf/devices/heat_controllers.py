@@ -9,6 +9,7 @@ from ramses_rf.const import (
     SZ_CIRCUITS,
     SZ_HEAT_DEMAND,
     SZ_RELAY_DEMAND,
+    SZ_ZONE_INDEX,
     DevType,
 )
 from ramses_rf.entity import Entity
@@ -282,6 +283,9 @@ class UfhController(Parent["UfhCircuit"], DeviceHeat):  # UFC (02):
     async def pump_relay_state(self) -> PumpRelayState | None:  # 3EF0
         """Return the UFC pump heating/cooling relay state.
 
+        Falls back to evaluating the secondary relay demand (`relay_demand_fa`)
+        if no explicit 3EF0 packet has been received from the HCE80.
+
         :returns: 'cooling', 'heating', 'off', or None.
         :rtype: PumpRelayState | None
         """
@@ -290,6 +294,13 @@ class UfhController(Parent["UfhCircuit"], DeviceHeat):  # UFC (02):
             pump_state = state.pump_relay_state
             if isinstance(pump_state, PumpRelayState):
                 return pump_state
+
+        relay_demand_fa_value = await self.relay_demand_fa()
+        if relay_demand_fa_value is not None:
+            if relay_demand_fa_value > 0.0:
+                return PumpRelayState.HEATING
+            return PumpRelayState.OFF
+
         return None
 
     async def setpoints(self) -> SchemaT | None:  # 22C9|ufh_index array
@@ -315,9 +326,46 @@ class UfhController(Parent["UfhCircuit"], DeviceHeat):  # UFC (02):
         :rtype: SchemaT
         """
         base_schema = await super().schema()
+        circuits_schema: dict[str, dict[str, str | None]] = {}
+        fallback_circuits = getattr(self, "circuit_by_id", {})
+        if self.circuits:
+            for circuit in self.circuits:
+                circuit_entry: dict[str, str | None] = {}
+                fallback_entry = (
+                    fallback_circuits.get(circuit.ufh_index, {})
+                    if isinstance(fallback_circuits, dict)
+                    else {}
+                )
+                fallback_zone_index = (
+                    fallback_entry.get(SZ_ZONE_INDEX)
+                    if isinstance(fallback_entry, dict)
+                    else None
+                )
+                zone_index = circuit.zone_index or fallback_zone_index
+                if zone_index is not None:
+                    circuit_entry[SZ_ZONE_INDEX] = str(zone_index)
+                elif (
+                    isinstance(fallback_entry, dict)
+                    and SZ_ZONE_INDEX in fallback_entry
+                ):
+                    circuit_entry[SZ_ZONE_INDEX] = fallback_entry[
+                        SZ_ZONE_INDEX
+                    ]
+                circuits_schema[circuit.ufh_index] = circuit_entry
+        elif isinstance(fallback_circuits, dict):
+            for ufh_index, raw_entry in fallback_circuits.items():
+                if isinstance(raw_entry, dict):
+                    fallback_zone_index = raw_entry.get(SZ_ZONE_INDEX)
+                    entry: dict[str, str | None] = {}
+                    if fallback_zone_index is not None:
+                        entry[SZ_ZONE_INDEX] = str(fallback_zone_index)
+                    elif SZ_ZONE_INDEX in raw_entry:
+                        entry[SZ_ZONE_INDEX] = raw_entry[SZ_ZONE_INDEX]
+                    circuits_schema[str(ufh_index)] = entry
+
         return {
             **base_schema,
-            SZ_CIRCUITS: getattr(self, "circuit_by_id", {}),
+            SZ_CIRCUITS: circuits_schema,
         }
 
     async def params(self) -> SchemaT:
@@ -458,6 +506,21 @@ class UfhCircuit(Child, Entity):
             return str(self._zone._child_id)
         state = self._state
         return state.zone_index if state else None
+
+    async def name(self) -> str | None:
+        """Return the friendly name of the UFH circuit.
+
+        If bound to a zone, formats as '{zone_name} Circuit {ufh_index}'.
+        Otherwise, returns None.
+
+        :returns: The circuit friendly name or None.
+        :rtype: str | None
+        """
+        if self._zone:
+            zone_name = await self._zone.name()
+            if zone_name:
+                return f"{zone_name} Circuit {self.ufh_index}"
+        return None
 
     @property
     def heat_demand(self) -> float | None:

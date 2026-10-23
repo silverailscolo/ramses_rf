@@ -660,6 +660,16 @@ class DiscoveryScan:
         source = dto.addr1.strip()
         destination = dto.addr2.strip()
         addr3 = dto.addr3.strip() if dto.addr3 else ""
+        # Directed I frames carry the peer in addr3 with addr2 ==
+        # "--:------" (e.g. I --- 04:034039 --:------ 01:256581 12B0,
+        # ramses-rf/ramses_cc#1353).
+        if (
+            not _is_valid_address(destination)
+            and _is_valid_address(source)
+            and _is_valid_address(addr3)
+            and addr3 != source
+        ):
+            destination = addr3
         code = str(dto.code).strip()
         verb = dto.verb if dto.verb else ""
 
@@ -669,10 +679,18 @@ class DiscoveryScan:
             with contextlib.suppress(ValueError, TypeError):
                 rssi = float(dto.rssi)
 
-        # Extract zone_index from payload if this is a binding code
+        # Extract zone_index from payload if this is a binding code.
+        # A 2309 setpoint only carries a zone index when directed to a
+        # peer — a self-addressed 2309 from a standalone THM/RND (like
+        # the excluded 30C9) holds its own internal stat index ("00"),
+        # not a CTL zone (ramses-rf/ramses_cc#1182).
         zone_index = (
             _extract_zone_index_from_payload(dto.payload or dto.raw_payload)
             if code in _ZONE_BINDING_CODES
+            and (
+                code != Code._2309
+                or (_is_valid_address(destination) and destination != source)
+            )
             else None
         )
 
@@ -683,8 +701,10 @@ class DiscoveryScan:
         # See issue 834 comment 5044906835.
         domain_id: str | None = None
         is_authoritative_domain = False
-        if code == Code._000C and dto.payload:
-            domain_id = _extract_domain_id_from_000c(dto.payload)
+        if code == Code._000C and (dto.payload or dto.raw_payload):
+            domain_id = _extract_domain_id_from_000c(
+                dto.payload or dto.raw_payload
+            )
             if domain_id:
                 is_authoritative_domain = True
         if not domain_id:
@@ -1067,7 +1087,7 @@ class DiscoveryScan:
                     device.zone_index = zone_index
                     if (
                         destination
-                        and _is_valid_address(destination)
+                        and _is_discoverable_address(destination)
                         and destination != device_id
                     ):
                         if device.bound_to != destination:
@@ -1323,6 +1343,14 @@ class DiscoveryScan:
         device = self._devices.get(device_id)
 
         if device is None:
+            # Don't create an entry from dst/addr3 evidence alone when
+            # the prefix maps to no known DevType (e.g. 62: — the stale
+            # binding target of an unbound one-way remote): it could
+            # only ever become an unclassifiable DEV/low ghost.  Real
+            # devices register via a source packet eventually; an
+            # already-tracked device still gets enriched below.
+            if not is_source and not _is_discoverable_address(device_id):
+                return
             # New device — classify and create entry
             likely_type = _classify(device_id, code, verb, is_source=is_source)
             device = DiscoveredDevice(
@@ -1352,7 +1380,7 @@ class DiscoveryScan:
                 device.zone_index = zone_index
                 if (
                     destination
-                    and _is_valid_address(destination)
+                    and _is_discoverable_address(destination)
                     and destination != device_id
                 ):
                     device.bound_to = destination
@@ -1484,7 +1512,7 @@ class DiscoveryScan:
             device.zone_index = zone_index
             if (
                 destination
-                and _is_valid_address(destination)
+                and _is_discoverable_address(destination)
                 and destination != device_id
             ):
                 if device.bound_to != destination:
@@ -1676,10 +1704,27 @@ class DiscoveryScan:
         device is declared as REM in the schema.
         """
         parsed = json.loads(data)
-        self._devices = {
+        devices = {
             d["device_id"]: DiscoveredDevice.from_dict(d)
             for d in parsed.get("devices", [])
         }
+        # Drop imported entries the scan could never create today:
+        # malformed/sentinel addresses, and dst-only ghosts whose prefix
+        # maps to no known device class (e.g. 62:008256 — a stale
+        # one-way binding target that was never seen transmitting).
+        # Declared devices and real transmitters are retained.
+        self._devices = {
+            device_id: device
+            for device_id, device in devices.items()
+            if _is_discoverable_address(device_id)
+            or self._is_known(device_id)
+            or device.source_count > 0
+        }
+        if dropped := set(devices) - set(self._devices):
+            _LOGGER.debug(
+                "DiscoveryScan: dropped undiscoverable imported devices: %s",
+                sorted(dropped),
+            )
         # Override likely_type for known devices with declared class
         had_overrides = False
         for device_id, device in self._devices.items():
@@ -1732,6 +1777,28 @@ def _is_valid_address(device_id: str) -> bool:
         return False
     # Basic format check: should contain a colon
     return ":" in device_id
+
+
+def _is_discoverable_address(device_id: str) -> bool:
+    """Check if an address can produce a useful discovery entry.
+
+    Extends :func:`_is_valid_address` by requiring the prefix to map to
+    a known DevType (``_PREFIX_TO_TYPE``).  An address with an unknown
+    prefix can only ever be classified as a low-confidence DEV — for
+    dst/addr3-only sightings (e.g. ``62:008256``, the stale binding
+    target of an unbound one-way remote) that produces ghost devices,
+    so those are not registered.  Source addresses are not restricted:
+    a real transmitter should be discovered even when its prefix is
+    unknown.
+
+    :param device_id: The device ID to check.
+    :type device_id: str
+    :return: True if the address may be registered as a device.
+    :rtype: bool
+    """
+    return _is_valid_address(device_id) and (
+        dev_type_from_prefix(device_id) is not None
+    )
 
 
 def _classify(
@@ -1910,8 +1977,12 @@ def _extract_zone_index_from_payload(  # type: ignore[explicit-any]  # duck-type
             if result is not None:
                 return result
         return None
-    if hasattr(payload, "zone_index"):
-        zone_index_val = payload.zone_index
+    # 3150-style payloads carry the index as domain_or_zone_index
+    # (HeatDemand1B/2B) rather than zone_index (ramses-rf/ramses_cc#1345).
+    zone_index_val = getattr(payload, "zone_index", None)
+    if zone_index_val is None:
+        zone_index_val = getattr(payload, "domain_or_zone_index", None)
+    if zone_index_val is not None:
         if isinstance(zone_index_val, int):
             if zone_index_val > 0x0B:
                 return None
@@ -2063,6 +2134,11 @@ def _extract_domain_id_from_000c(  # type: ignore[explicit-any]  # duck-typed pa
     if hasattr(payload, "domain_id"):
         result_domain = payload.domain_id
         return str(result_domain) if result_domain is not None else None
+    for item in _decode_000c_items(payload):
+        if hasattr(item, "domain_id"):
+            result_domain = item.domain_id
+            if result_domain is not None:
+                return str(result_domain)
     if not payload or not isinstance(payload, str) or len(payload) < 4:
         return None
     role = payload[2:4].upper()

@@ -298,17 +298,27 @@ class HeatDemand2BPayload(HeatDemandPayload):
         if index >= 0xF0:
             result[SZ_DOMAIN_INDEX] = FC if index == 0xFC else f"{index:02X}"
         else:
-            is_ufc = False
+            is_ufc_circuit = False
             if msg is not None and getattr(msg, "src", None) is not None:
                 src_str = str(getattr(msg.src, "id", msg.src))
-                if src_str.startswith("02:") or getattr(
+                is_src_ufc = src_str.startswith("02:") or getattr(
                     msg.src, "type", ""
                 ) in (
                     "02",
                     DevType.UFC,
-                ):
-                    is_ufc = True
-            index_name = SZ_UFH_INDEX if is_ufc else SZ_ZONE_INDEX
+                )
+                if is_src_ufc:
+                    dst = getattr(msg, "dst", None)
+                    dst_str = (
+                        str(getattr(dst, "id", dst)) if dst is not None else ""
+                    )
+                    dst_is_ctl = dst_str.startswith("01:") or (
+                        dst is not None
+                        and getattr(dst, "type", "") in ("01", DevType.CTL)
+                    )
+                    if not dst_is_ctl:
+                        is_ufc_circuit = True
+            index_name = SZ_UFH_INDEX if is_ufc_circuit else SZ_ZONE_INDEX
             result[index_name] = f"{index:02X}"
         return result
 
@@ -2175,7 +2185,6 @@ class ZoneDevicesPayload(PayloadBase):
     """Master payload dispatcher and base class for Opcode 000C.
 
     Protocol & Heuristic Notes:
-      # TODO: 000C to a UFC should be ufh_index, not zone_index
       # NOTE: Both len=5 and len=6 elements are valid! So collision when len = 036!
       # Note: 000C sent to a UFC device represents ufh_index rather than zone_index
       # If sent to/from a UFC device, byte 0 is ufh_index and sub_index is zone_index
@@ -3529,7 +3538,6 @@ class ActuatorStatePayload(PayloadBase):
       # ch_setpoint, and max_rel_modulation.
       # NOTE: some [2:4] appear to intend 0x00-0x64 (high_res=False), instead of 0x00-0xC8
       # NOTE: for best compatibility, all will be switched to 0x00-0xC8 (high_res=True)
-      # TODO: These two should be picked up by the regex
       # .I --- 13:042805 --:------ 13:042805 3EF0 003 0000FF
       # .I --- 13:023770 --:------ 13:023770 3EF0 003 00C8FF
       # RP --- 10:004598 34:003611 --:------ 3EF0 006 0000100000FF

@@ -883,7 +883,7 @@ def test_pipeline_shadow_parity_execution() -> None:
         addr3="--:------",
         code=Code._3150,
         length="002",
-        payload="00C8",
+        raw_payload="00C8",
     )
 
     # Act
@@ -1338,7 +1338,7 @@ def test_pipeline_3150_non_array_preserves_index() -> None:
         addr3="01:555555",
         code=Code._3150,
         length="002",
-        payload="00C8",
+        raw_payload="00C8",
     )
 
     # Act
@@ -1362,7 +1362,7 @@ def test_pipeline_3150_ufc_emits_canonical_ufh_index() -> None:
         addr3="02:000921",
         code=Code._3150,
         length="002",
-        payload="0360",
+        raw_payload="0360",
     )
 
     # Act

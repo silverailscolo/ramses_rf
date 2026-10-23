@@ -8,8 +8,10 @@ from typing import TYPE_CHECKING
 
 from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command
+from ramses_rf.enums import Action
 from ramses_rf.interfaces import GatewayInterface
 from ramses_rf.messages import Message
+from ramses_rf.models.hvac_schemas import FanParamInfo
 from ramses_tx import Priority
 from ramses_tx.const import DEFAULT_WAIT_FOR_REPLY
 from ramses_tx.dtos import CommandDTO
@@ -79,6 +81,43 @@ class CommandDispatcher:
                 target_dev,
             )
 
+    def _prefer_reported_fan_param_schema(self, intent: Command) -> Command:
+        """Prefer the device-reported parameter schema for SET_FAN_PARAM.
+
+        If the destination fan has reported a definition for this parameter
+        (cached on the device from RP/I 2411 frames), inject it so the
+        builder encodes the write per the device's own data_type/min/max/
+        precision rather than the static schema — param semantics differ
+        per device family. See https://github.com/ramses-rf/ramses_rf/issues/1332.
+
+        :param intent: The command intent.
+        :type intent: Command
+        :returns: The intent, enriched with `fan_param_schema` if a usable
+            device-reported definition exists.
+        :rtype: Command
+        """
+        if intent.action != Action.SET_FAN_PARAM:
+            return intent
+
+        registry = getattr(self._gateway, "device_registry", None)
+        if registry is None:
+            return intent
+        device = getattr(registry, "device_by_id", {}).get(intent.dst.id)
+        get_schema = getattr(device, "get_2411_param_schema", None)
+        if not callable(get_schema):
+            return intent
+
+        schema = get_schema(str(intent.get("param_id", "") or ""))
+        if isinstance(schema, FanParamInfo):
+            _LOGGER.debug(
+                "%s < 2411 param %s: using device-reported schema (data_type %s)",
+                intent.dst.id,
+                intent.get("param_id"),
+                schema.data_type,
+            )
+            return intent.with_data(fan_param_schema=schema)
+        return intent
+
     async def send(
         self,
         intent: Command,
@@ -98,7 +137,9 @@ class CommandDispatcher:
         :rtype: Message
         """
         self._check_transmission_policy(intent)
-        dto: CommandDTO = build_dto(intent)
+        dto: CommandDTO = build_dto(
+            self._prefer_reported_fan_param_schema(intent)
+        )
         conv_mgr = self._gateway.conversation_manager
 
         if wait_for_reply and conv_mgr is not None:

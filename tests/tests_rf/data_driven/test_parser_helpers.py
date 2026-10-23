@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """RAMSES RF - Test the various helper APIs."""
 
-# TODO: add test for ramses_tx.frame.packet_header()
 import logging
 from datetime import datetime as dt
 
@@ -30,7 +29,7 @@ from ramses_tx.helpers import (
     hex_to_str,
     hex_to_temp,
 )
-from ramses_tx.packet import Packet
+from ramses_tx.packet import Packet, packet_header
 
 from .helpers import TEST_DIR
 
@@ -360,29 +359,40 @@ def test_helper_field_parsers() -> None:
         assert cent == hex_to_percent(hex_from_percent(cent))
 
 
-def _test_packet_dev_class() -> None:
-    """Check that the device class is correctly inferred from the packet.
+def test_packet_header() -> None:
+    """Verify QoS header fingerprint generation across verb/address/code forms."""
+    # Arrange: 1FC9 self-broadcast offer uses ALL_DEV_ADDR (63:262142)
+    offer_pkt = Packet.from_file(
+        "2023-11-12T19:48:24.587738",
+        "044  I --- 37:198669 --:------ 37:198669 1FC9 006 0022F1965FE1",
+    )
+    # 1FC9 directed accept uses dst.id
+    accept_pkt = Packet.from_file(
+        "2023-11-12T19:48:25.000000",
+        "044  W --- 32:155617 37:198669 --:------ 1FC9 006 0031D9825FE1",
+    )
+    # I / RP uses src.id (plus _ctx when string)
+    info_pkt = Packet.from_file(
+        "2023-11-12T19:48:26.000000",
+        "044  I --- 01:145038 --:------ 01:145038 1F09 003 0005C8",
+    )
+    rp_idx_pkt = Packet.from_file(
+        "2023-11-12T19:48:27.000000",
+        "044 RP --- 01:145038 18:000730 --:------ 30C9 003 0107D0",
+    )
+    # RQ / W uses dst.id (plus _ctx when string)
+    rq_idx_pkt = Packet.from_file(
+        "2023-11-12T19:48:28.000000",
+        "044 RQ --- 18:000730 01:145038 --:------ 30C9 001 01",
+    )
 
-    Some packets (not all) can be used to determine the domain (Heat vs HVAC) and
-    class (e.g. BDR, CTL, FAN, etc)of the source device.
-    """
-
-    def proc_log_line(log_line: str) -> None:
-        if "#" not in log_line:
-            return
-        packet_line, packet_eval = log_line.split("#", maxsplit=1)
-
-        if not packet_line[27:].strip():
-            return
-
-        packet = Packet.from_file(packet_line[:26], packet_line[27:])
-
-        assert packet.src.type == eval(packet_eval)  # TODO: finish this test
-
-    with open(f"{WORK_DIR}/packet_dev_class.log") as f:
-        while line := (f.readline()):
-            if line.strip():
-                proc_log_line(line)
+    # Act / Assert
+    assert packet_header(offer_pkt) == "1FC9| I|63:262142"
+    assert packet_header(accept_pkt) == "1FC9| W|37:198669"
+    assert packet_header(info_pkt) == "1F09| I|01:145038"
+    assert packet_header(rp_idx_pkt) == "30C9|RP|01:145038|01"
+    assert packet_header(rq_idx_pkt) == "30C9|RQ|01:145038|01"
+    assert rq_idx_pkt._hdr == packet_header(rq_idx_pkt)
 
 
 def test_packet_addr_sets() -> None:

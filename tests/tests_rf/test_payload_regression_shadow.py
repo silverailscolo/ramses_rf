@@ -103,7 +103,7 @@ def test_payload_dataclass_regression_roundtrip_parity() -> None:
         if payload_cls is None:
             continue
 
-        raw_bytes: bytes = bytes.fromhex(packet.payload)
+        raw_bytes: bytes = bytes.fromhex(packet.raw_payload)
 
         # 1. Test from_bytes decoding
         try:
@@ -120,7 +120,7 @@ def test_payload_dataclass_regression_roundtrip_parity() -> None:
                     line_num,
                     packet.code,
                     packet.verb,
-                    packet.payload,
+                    packet.raw_payload,
                     str(err),
                     legacy_res_str,
                 )

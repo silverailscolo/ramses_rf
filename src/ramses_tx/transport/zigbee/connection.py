@@ -140,6 +140,7 @@ class ZigbeeConnectionManager:
         gateway = self._zha_gateway or self._current_gateway()
         if gateway is None:
             return None
+        ieee: object
         try:
             from zigpy.types import EUI64
 
