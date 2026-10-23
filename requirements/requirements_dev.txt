@@ -11,24 +11,25 @@
 
 # used for development (linting)
   prek == 0.5.5                                  # latest, same as ramses_cc
-  ruff >= 0.17.1                                 # also in: pre-commit-config.yaml
+  ruff >= 0.17.2                                 # also in: pre-commit-config.yaml
 
 # used for development (typing)
   mypy >= 2.4.0                                  # HA uses  1.19.0a4 !
   types-aiofiles >= 25.1.0.20260518
   types-colorama >= 0.4.15.20260508
   types-PyYAML >= 6.0.12.20260906                # HA uses 6.0.12.20250516
-  serialx >= 1.9.0
+  serialx >= 1.15.0
   probatio >= 0.13.0                             # HA uses 0.13.0 since 2026.10.0
 
 # used for testing
   pytest >= 9.1.1                                # HA uses 8.4.2
   pytest-asyncio >= 1.4.0                        # HA uses 1.2.0
-  pytest-cov >= 7.1.0                            # HA uses 6.2.1, includes coverage.py as dep
+  pytest-cov >= 7.1.0                            # HA uses 6.2.1, includes older coverage.py as dep
   pytest-sugar >= 1.1.1                          # HA uses 1.0.0
   pytest-xdist >= 3.8.0                          # HA uses 3.8.0
   PyYAML                                         # required for tests/tests/test_vol_schema import
   syrupy >= 6.1.1                                # HA uses 5.0.0 - 07/02/2026 - 2026.2.1
+  coverage >= 7.17.0                             # security patch 22 Oct. 2026
 
 # used for build/deploy
   hatch >= 1.18.1
