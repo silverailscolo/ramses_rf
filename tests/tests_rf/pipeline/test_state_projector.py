@@ -72,6 +72,8 @@ from ramses_rf.protocol.opentherm import (
 )
 from ramses_rf.state_projector import (
     _update_hvac_state,
+    _update_temperature_state,
+    _update_zone_state,
     process_state_updates,
 )
 from ramses_rf.strategies.orcon import OrconStrategy
@@ -921,6 +923,121 @@ def test_2309_and_2349_correctly_update_zones_and_do_not_mutate_appliance_contro
     assert zone_01.temp_state.setpoint == 21.5
     assert zone_00.temp_state.setpoint == 18.0
     assert otb_dev.opentherm_state.temperatures.boiler_setpoint == 60.0
+
+
+def test_trv_2309_off_sentinel_does_not_mutate_zone_setpoint() -> None:
+    """Verify a TRV's local-off 2309 (0x7EFF -> False) never blanks a zone.
+
+    Regression test for ramses-rf/ramses_cc#1381: a TRV reporting a local
+    OFF carried setpoint False, which zone_state/temp_state recorded —
+    the HA climate entity rendered it as Off / 0 °C.  The sentinel is not
+    a °C value; the controller's broadcasts stay authoritative.
+    """
+    # Arrange: a zone holding the controller-confirmed setpoint
+    zone_03 = FakeZone("01:216136_03", setpoint=16.0)
+
+    trv_msg = MockMessage(
+        code=Code._2309,
+        verb=Verb.I_,
+        payload={SZ_ZONE_INDEX: "03", SZ_SETPOINT: False},
+        src_id="04:055480",
+        dst_id="01:216136",
+    )
+
+    # Act
+    _update_zone_state(zone_03, trv_msg.payload, trv_msg)
+    _update_temperature_state(zone_03, trv_msg.payload, trv_msg)
+
+    # Assert: the sentinel must not overwrite either read-model
+    assert zone_03.zone_state.setpoint == 16.0
+    assert zone_03.temp_state.setpoint == 16.0
+
+
+def test_trv_2309_off_sentinel_kept_on_reporting_device() -> None:
+    """Verify the actuator's own temp_state still records its local OFF.
+
+    The 0x7EFF sentinel is meaningful on the reporting TRV (its local
+    state) — only zone read-models must ignore it.
+    """
+    # Arrange
+    trv_dev = FakeDevice()
+    trv_dev.id = "04:055480"
+    trv_dev._SLUG = DevType.TRV
+    trv_dev.temp_state = TemperatureState(setpoint=16.0)
+
+    trv_msg = MockMessage(
+        code=Code._2309,
+        verb=Verb.I_,
+        payload={SZ_ZONE_INDEX: "03", SZ_SETPOINT: False},
+        src_id="04:055480",
+        dst_id="01:216136",
+    )
+
+    # Act
+    _update_temperature_state(trv_dev, trv_msg.payload, trv_msg)
+
+    # Assert: the reporting device keeps its own OFF sentinel
+    assert trv_dev.events
+    assert trv_dev.events[-1].state.setpoint is False
+
+
+def test_ctl_2309_off_sentinel_does_not_mutate_zone_setpoint() -> None:
+    """Same sentinel guard on the CQRS worker path (controller sync)."""
+    # Arrange
+    ctl_dev = FakeDevice()
+    ctl_dev.id = "01:216136"
+    ctl_dev._SLUG = DevType.CTL
+
+    zone_03 = FakeZone("01:216136_03", setpoint=16.0)
+
+    class FakeTcs:
+        id = "01:216136"
+        zone_by_index = {"03": zone_03}
+
+    mock_tcs = FakeTcs()
+    registry = FakeRegistry(ctl_dev)
+    registry.systems = [mock_tcs]
+
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    # Act: controller syncs a zone element carrying the OFF sentinel
+    msg_2309_off = MockMessage(
+        code=Code._2309,
+        verb=Verb.I_,
+        payload={SZ_ZONE_INDEX: "03", SZ_SETPOINT: False},
+        src_id="01:216136",
+        dst_id="--:------",
+    )
+    worker.process_message_state(msg_2309_off)
+
+    # Assert
+    assert zone_03.zone_state.setpoint == 16.0
+    assert zone_03.temp_state.setpoint == 16.0
+
+
+def test_2349_off_sentinel_does_not_mutate_zone_setpoint() -> None:
+    """Verify the 2349 setpoint write applies the same sentinel guard."""
+    # Arrange
+    zone_03 = FakeZone("01:216136_03", setpoint=16.0)
+
+    msg_2349_off = MockMessage(
+        code=Code._2349,
+        verb=Verb.I_,
+        payload={
+            SZ_ZONE_INDEX: "03",
+            SZ_SETPOINT: False,
+        },
+        src_id="01:216136",
+        dst_id="18:001234",
+    )
+
+    # Act
+    _update_zone_state(zone_03, msg_2349_off.payload, msg_2349_off)
+
+    # Assert
+    assert zone_03.zone_state.setpoint == 16.0
 
 
 def test_issue_989_interleaved_packet_sequence_no_zone_00_oscillation() -> (

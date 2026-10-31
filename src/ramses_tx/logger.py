@@ -12,7 +12,7 @@ import re
 import shutil
 import sys
 from collections.abc import Callable, Mapping
-from datetime import datetime as dt, time as dtime
+from datetime import UTC, datetime as dt, time as dtime
 from logging.handlers import (
     MemoryHandler,
     QueueHandler,
@@ -22,11 +22,10 @@ from logging.handlers import (
 from os import PathLike
 from queue import Queue
 from types import TracebackType
-from typing import TypeAlias
 
 from .version import VERSION
 
-_SysExcInfoT: TypeAlias = (
+type _SysExcInfoT = (
     tuple[type[BaseException], BaseException, TracebackType | None]
     | tuple[None, None, None]
     | None
@@ -155,6 +154,18 @@ class ColoredFormatter(_Formatter, colorlog.ColoredFormatter):  # type: ignore[m
 
 class Formatter(_Formatter, logging.Formatter):  # type: ignore[misc]
     """Standard log message formatter."""
+
+
+class PacketLogFormatter(Formatter):
+    """Format packet-log timestamps as unambiguous UTC ISO 8601 values."""
+
+    def formatTime(
+        self, record: logging.LogRecord, datefmt: str | None = None
+    ) -> str:
+        """Return an offset-aware UTC timestamp for a packet-log record."""
+        return dt.fromtimestamp(record.created, tz=UTC).isoformat(
+            timespec="microseconds"
+        )
 
 
 class PktLogFilter(
@@ -348,7 +359,7 @@ def set_packet_logging(
         else:
             file_handler = logging.FileHandler(file_name)
 
-        logfile_fmt = Formatter(fmt=PKT_LOG_FMT + BANDW_SUFFIX)
+        logfile_fmt = PacketLogFormatter(fmt=PKT_LOG_FMT + BANDW_SUFFIX)
 
         file_handler.setFormatter(logfile_fmt)
         file_handler.setLevel(logging.INFO)  # .INFO (usually), or .DEBUG

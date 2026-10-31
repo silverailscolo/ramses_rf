@@ -1215,7 +1215,15 @@ class StateProjector:
                     updates[SZ_TEMPERATURE] = payload[SZ_TEMPERATURE]
 
             if SZ_SETPOINT in payload:
-                updates[SZ_SETPOINT] = payload[SZ_SETPOINT]
+                # A bool sentinel (0x7EFF: an actuator reporting a local
+                # OFF) is not a °C setpoint — don't let it overwrite a
+                # zone's setpoint (ramses-rf/ramses_cc#1381).  The
+                # reporting device's own temp_state still records it.
+                if not (
+                    hasattr(target, "zone_state")
+                    and isinstance(payload[SZ_SETPOINT], bool)
+                ):
+                    updates[SZ_SETPOINT] = payload[SZ_SETPOINT]
 
             if updates:
                 if dtm:
@@ -1760,13 +1768,17 @@ class StateProjector:
         elif msg.code == Code._2349:
             if SZ_MODE in payload:
                 updates[SZ_MODE] = payload[SZ_MODE]
-            if SZ_SETPOINT in payload:
+            if SZ_SETPOINT in payload and not isinstance(
+                payload[SZ_SETPOINT], bool
+            ):
                 updates[SZ_SETPOINT] = payload[SZ_SETPOINT]
             if SZ_UNTIL in payload:
                 updates[SZ_UNTIL] = payload[SZ_UNTIL]
 
         elif msg.code == Code._2309:
-            if SZ_SETPOINT in payload:
+            if SZ_SETPOINT in payload and not isinstance(
+                payload[SZ_SETPOINT], bool
+            ):
                 updates[SZ_SETPOINT] = payload[SZ_SETPOINT]
 
         else:

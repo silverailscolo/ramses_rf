@@ -9,7 +9,7 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass
 from datetime import datetime as dt
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self, cast
 
 from ramses_rf.const import (
     DEV_ROLE_MAP,
@@ -699,6 +699,18 @@ class ScheduleSwitchpointPayload(PayloadBase):
                 f"Invalid payload length for 0404: {len(raw_data)}"
             )
 
+        # A 20-byte packet may be a final schedule fragment.
+        # Check its header before decoding a switchpoint.
+        _, prefix, frag_len, frag_number, total_frags = struct.unpack_from(
+            ScheduleFragmentPayload._STRUCT_FMT_HEADER, raw_data
+        )
+        if (
+            prefix in (b"\x20\x00\x08", b"\x23\x00\x08")
+            and frag_len == len(raw_data) - 7
+            and 0 < frag_number <= total_frags
+        ):
+            return ScheduleFragmentPayload.from_bytes(raw_data)
+
         index, dow, tod, setpoint_raw, _ = struct.unpack(
             cls._STRUCT_FMT, raw_data
         )
@@ -1159,7 +1171,7 @@ class BindingPayload(PayloadBase):
                 try:
                     bound_dev_id = hex_id_to_dev_id(dev_hex)
                 except ValueError:
-                    bound_dev_id = DeviceIdT(dev_hex)
+                    bound_dev_id = cast(DeviceIdT, dev_hex)
                 bindings.append([domain_id_hex, opcode_hex, bound_dev_id])
         elif len(payload_hex) == 2:
             bindings.append([payload_hex])

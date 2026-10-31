@@ -5,6 +5,7 @@ import logging
 import threading
 from collections.abc import Generator
 from datetime import datetime as dt, timedelta as td
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -17,6 +18,7 @@ from ramses_rf.const import (
     SZ_REQ_REASON,
     Code,
     DevType,
+    Verb,
 )
 from ramses_rf.gateway import Gateway, GatewayConfig
 from ramses_rf.messages import Message
@@ -88,7 +90,7 @@ class Test_dispatcher_gateway:
     @pytest.mark.skip(reason="requires gwy")
     def test_instantiate_devices(self, mock_gateway: MagicMock) -> None:
         """Test device creation from addresses via pipeline stage."""
-        dev1 = Device(mock_gateway, Address(DeviceIdT("04:189078")))
+        dev1 = Device(mock_gateway, Address(cast(DeviceIdT, "04:189078")))
         mock_gateway.device_registry.device_by_id.get = MagicMock(
             return_value=dev1
         )
@@ -1071,6 +1073,153 @@ class TestResolveLogicalTargets:
         msg.code = Code._2309
         msg._has_array = False
         payload = {"zone_index": "00", "setpoint": 24.0}
+
+        # Act
+        targets = dispatcher._resolve_logical_targets(
+            mock_gateway, msg, payload
+        )
+
+        # Assert
+        assert mock_zone in targets
+
+    def test_w_echo_zone_index_does_not_route_to_zone(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify a W echo carrying a zone_index never reaches the zone.
+
+        Regression test for ramses-rf/ramses_cc#1381: our own
+        reset_zone_mode echoes back as `W 2349` (dst = CTL) carrying
+        setpoint 7FFF (None); projecting it blanked the zone's setpoint
+        for up to a whole scan interval until the controller's I 2349
+        reply restored it.  Commands are outbound intent, not reports.
+        """
+        # Arrange
+        mock_zone = MagicMock()
+
+        mock_tcs = MagicMock()
+        mock_tcs.id = "01:168186"
+        mock_tcs.zone_by_index = {"03": mock_zone}
+
+        mock_hgi = MagicMock()
+        mock_hgi.id = "18:001234"
+        mock_hgi.type = "18"
+        mock_hgi.tcs = None
+
+        mock_ctl = MagicMock()
+        mock_ctl.id = "01:168186"
+        mock_ctl.type = "01"
+        mock_ctl.tcs = mock_tcs
+
+        mock_gateway.device_registry.device_by_id = {
+            mock_hgi.id: mock_hgi,
+            mock_ctl.id: mock_ctl,
+        }
+
+        msg = MagicMock()
+        msg.src.id = mock_hgi.id
+        msg.dst.id = mock_ctl.id
+        msg.code = Code._2349
+        msg.verb = Verb.W_
+        msg._has_array = False
+        payload = {
+            "zone_index": "03",
+            "mode": "follow_schedule",
+            "setpoint": None,
+            "until": None,
+        }
+
+        # Act
+        targets = dispatcher._resolve_logical_targets(
+            mock_gateway, msg, payload
+        )
+
+        # Assert: the command echo must not project onto the zone
+        assert mock_zone not in targets
+
+    def test_rq_zone_index_does_not_route_to_zone(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify an RQ carrying a zone_index never reaches the zone."""
+        # Arrange
+        mock_zone = MagicMock()
+
+        mock_tcs = MagicMock()
+        mock_tcs.id = "01:168186"
+        mock_tcs.zone_by_index = {"03": mock_zone}
+
+        mock_hgi = MagicMock()
+        mock_hgi.id = "18:001234"
+        mock_hgi.type = "18"
+        mock_hgi.tcs = None
+
+        mock_ctl = MagicMock()
+        mock_ctl.id = "01:168186"
+        mock_ctl.type = "01"
+        mock_ctl.tcs = mock_tcs
+
+        mock_gateway.device_registry.device_by_id = {
+            mock_hgi.id: mock_hgi,
+            mock_ctl.id: mock_ctl,
+        }
+
+        msg = MagicMock()
+        msg.src.id = mock_hgi.id
+        msg.dst.id = mock_ctl.id
+        msg.code = Code._2309
+        msg.verb = Verb.RQ
+        msg._has_array = False
+        payload = {"zone_index": "03"}
+
+        # Act
+        targets = dispatcher._resolve_logical_targets(
+            mock_gateway, msg, payload
+        )
+
+        # Assert
+        assert mock_zone not in targets
+
+    def test_ctl_i_2349_still_routes_to_zone(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify the controller's I 2349 reply still routes to the zone.
+
+        The W/RQ exclusion must not suppress the controller's own
+        reports — its I/RP confirms remain authoritative for the zone.
+        """
+        # Arrange
+        mock_zone = MagicMock()
+
+        mock_tcs = MagicMock()
+        mock_tcs.id = "01:168186"
+        mock_tcs.zone_by_index = {"03": mock_zone}
+
+        mock_ctl = MagicMock()
+        mock_ctl.id = "01:168186"
+        mock_ctl.type = "01"
+        mock_ctl.tcs = mock_tcs
+
+        mock_hgi = MagicMock()
+        mock_hgi.id = "18:001234"
+        mock_hgi.type = "18"
+        mock_hgi.tcs = None
+
+        mock_gateway.device_registry.device_by_id = {
+            mock_ctl.id: mock_ctl,
+            mock_hgi.id: mock_hgi,
+        }
+
+        msg = MagicMock()
+        msg.src.id = mock_ctl.id
+        msg.dst.id = mock_hgi.id
+        msg.code = Code._2349
+        msg.verb = Verb.I_
+        msg._has_array = False
+        payload = {
+            "zone_index": "03",
+            "mode": "follow_schedule",
+            "setpoint": 16.0,
+            "until": None,
+        }
 
         # Act
         targets = dispatcher._resolve_logical_targets(

@@ -130,7 +130,8 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
     async def _process_line_from_raw(self, line: str) -> None:
         """Process a raw line from the packet source."""
         if (line := line.strip()) and line[:1] != "#":
-            await self._process_line(line[:26], line[27:])
+            dtm_str, _, packet_line = line.partition(" ")
+            await self._process_line(dtm_str, packet_line)
 
     async def _process_line(self, dtm_str: str, frame: str) -> None:
         """Push frame to protocol in a thread-safe way."""

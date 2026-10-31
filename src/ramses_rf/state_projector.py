@@ -314,7 +314,11 @@ def _resolve_logical_targets(
     # not be read as a controller zone index.  See:
     # https://github.com/ramses-rf/ramses_cc/issues/1208
     # Non-controller 30C9 (sensor broadcasts) is handled in step 8.
-    if SZ_ZONE_INDEX in p and tcs:
+    # Commands (RQ/W) are outbound intent, not state reports — e.g. our own
+    # reset_zone_mode echoes back as `W 2349` with setpoint 7FFF (None),
+    # which would blank the zone's setpoint until the controller's reply
+    # restores it.  See: https://github.com/ramses-rf/ramses_cc/issues/1381
+    if SZ_ZONE_INDEX in p and tcs and msg.verb not in (RQ, W_):
         tcs_id = getattr(tcs, "id", "")
         is_ctl_idx = src_type in (
             "01",
@@ -889,8 +893,17 @@ def _update_temperature_state(
             updates[SZ_TEMPERATURE] = p[SZ_TEMPERATURE]
 
     if "setpoint" in p:
-        # Prevent boiler setpoint opcodes (e.g. 22D9) from mutating zone setpoints
-        if msg.code != Code._22D9 or not hasattr(target, "zone_state"):
+        # Prevent boiler setpoint opcodes (e.g. 22D9) from mutating zone setpoints.
+        # Also prevent a bool sentinel (0x7EFF: an actuator reporting a local
+        # OFF) from overwriting a zone's setpoint — it is not a °C value, and
+        # the controller's broadcasts remain authoritative for the zone
+        # (ramses-rf/ramses_cc#1381).  The reporting device's own temp_state
+        # still records it.
+        if (
+            msg.code != Code._22D9 or not hasattr(target, "zone_state")
+        ) and not (
+            hasattr(target, "zone_state") and isinstance(p[SZ_SETPOINT], bool)
+        ):
             updates[SZ_SETPOINT] = p[SZ_SETPOINT]
 
     if not updates:
@@ -950,13 +963,16 @@ def _update_zone_state(
     elif msg.code == Code._2349:
         if SZ_MODE in p:
             updates[SZ_MODE] = p[SZ_MODE]
-        if SZ_SETPOINT in p:
+        # A bool sentinel (0x7EFF: actuator reporting a local OFF) is not
+        # a °C setpoint — the controller remains authoritative for the
+        # zone (ramses-rf/ramses_cc#1381).
+        if SZ_SETPOINT in p and not isinstance(p[SZ_SETPOINT], bool):
             updates[SZ_SETPOINT] = p[SZ_SETPOINT]
         if SZ_UNTIL in p:
             updates[SZ_UNTIL] = p[SZ_UNTIL]
 
     elif msg.code == Code._2309:
-        if SZ_SETPOINT in p:
+        if SZ_SETPOINT in p and not isinstance(p[SZ_SETPOINT], bool):
             updates[SZ_SETPOINT] = p[SZ_SETPOINT]
 
     else:
