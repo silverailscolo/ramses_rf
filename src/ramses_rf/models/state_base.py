@@ -19,6 +19,7 @@ class DeviceTraits:
     faked: bool | None = None
     scheme: str | None = None
     polling_interval: PollingIntervalsT | None = None
+    heartbeat_timeout: int | None = None
     is_battery: bool | None = None
 
     @classmethod
@@ -36,13 +37,14 @@ class DeviceTraits:
             faked=data.get("faked"),
             scheme=data.get("scheme"),
             polling_interval=data.get("polling_interval"),
+            heartbeat_timeout=data.get("heartbeat_timeout"),
             is_battery=data.get("is_battery"),
         )
 
     def to_dict(self) -> SchemaT:
         """Serialize back to a dictionary.
 
-        Useful for bridging the boundary into legacy methods expecting
+        Useful for bridging the boundary into pre-0.60 methods expecting
         **kwargs.
 
         :returns: A dictionary representing the device traits.
@@ -61,6 +63,8 @@ class DeviceTraits:
             result["scheme"] = getattr(self.scheme, "value", self.scheme)
         if self.polling_interval is not None:
             result["polling_interval"] = self.polling_interval
+        if self.heartbeat_timeout is not None:
+            result["heartbeat_timeout"] = self.heartbeat_timeout
         if self.is_battery is not None:
             result["is_battery"] = self.is_battery
         return result
@@ -141,7 +145,7 @@ class TopologyChangedEvent:
         return self.device_id or self.child_id or self.parent_id
 
 
-# --- Phase 2.95: CQRS Domain Read-Models and Events ---
+# --- CQRS Domain Read-Models and Events ---
 
 
 @dataclass(frozen=True, slots=True)

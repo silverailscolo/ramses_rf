@@ -81,6 +81,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
     """The filter state sensor (10D0)."""
 
     _SLUG: str = DevType.FAN
+    _HEARTBEAT_TIMEOUT: td = HEARTBEAT_TIMEOUT_FILTER
 
     _supports_10d0: bool = False
 
@@ -114,15 +115,6 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         :rtype: float | None
         """
         return self.hvac_state.filter_remaining_percent
-
-    @property
-    def heartbeat_timeout(self) -> td:
-        """Return the timeout before the device is considered unavailable.
-
-        :return: The timeout duration.
-        :rtype: td
-        """
-        return HEARTBEAT_TIMEOUT_FILTER
 
 
 class RfsGateway(DeviceHvac):  # RFS: (spIDer gateway)
@@ -166,6 +158,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     # Vasco (B)
 
     _SLUG: str = DevType.FAN
+    # FANs broadcast 31D9/31DA every ~90 seconds, so 15 minutes of
+    # silence (~10 missed broadcasts) indicates the device is offline.
+    _HEARTBEAT_TIMEOUT: td = HEARTBEAT_TIMEOUT_FAN
 
     # FAN-specific instance attributes (initialized in _init_fan_state)
     _supports_2411: bool
@@ -203,18 +198,6 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         self.__dict__.setdefault("_sensor_ids", set())
         if not hasattr(self, "hvac_state"):
             self.hvac_state = HvacState()
-
-    @property
-    def heartbeat_timeout(self) -> td:
-        """Return the timeout before the device is considered unavailable.
-
-        FANs broadcast 31D9/31DA every ~90 seconds, so 15 minutes of
-        silence (~10 missed broadcasts) indicates the device is offline.
-
-        :return: The timeout duration.
-        :rtype: td
-        """
-        return HEARTBEAT_TIMEOUT_FAN
 
     def _update_schema(  # type: ignore[explicit-any]  # schema-tree kwargs
         self, **schema: Any
@@ -1015,7 +998,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             SZ_TEMPERATURE: await self.temperature(),
         }
 
-        # Emulate the legacy behaviour by only exposing populated payload keys
+        # Emulate the pre-0.60 behaviour by only exposing populated payload keys
         merged_status = {
             **base_status,
             **{k: v for k, v in cqrs_status.items() if v is not None},
@@ -1034,7 +1017,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
             shim_status[k_str] = v_clean
 
-            # Legacy shim: map newer CQRS keys back to legacy downstream keys
+            # Pre-0.60 shim: map newer CQRS keys back to pre-0.60 downstream keys
             if k_str in ("indoor_temperature", "indoor_temp"):
                 shim_status["temperature"] = v_clean
 
